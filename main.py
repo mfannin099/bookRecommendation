@@ -9,33 +9,20 @@ import numpy as np
 
 from thefuzz import fuzz, process
 ##Importing Utils Functions
-from utils import pull_from_google_books
+from utils import check_to_run_initial_data_load, pull_from_google_books, create_library
 from utils import titles_l # Input data
 from utils import authors_l # Input data
 
 # Final Books DF
 # Global Vars
-final_books_df = pd.DataFrame()
-match_score = 70  # Could need to be adjusted (Looks right based on data that I have already)
 
-# Start Pulling Data
+CACHE_PATH = "library.parquet"
+FORCE_RUN = False
+MATCH_SCORE = 70
 
-for title, author in zip(titles_l, authors_l):
 
-    search_term = title
-    author = author
-    relevance = 'relevance'
 
-    url = f"https://www.googleapis.com/books/v1/volumes?q={search_term}+inauthor{author}&maxResults=1&orderBy={relevance}"
-    book_data = pull_from_google_books(url)
-
-    final_books_df = final_books_df.append(book_data)
-
-final_books_df['full_title'] = np.where(
-    final_books_df['subtitle'].notnull(),  # Check if subtitle exists
-    final_books_df['title'] + " " + final_books_df['subtitle'],  # If yes
-    final_books_df['title']  # If no
-)
+final_books_df = check_to_run_initial_data_load(CACHE_PATH,titles_l,authors_l, FORCE_RUN)
 print(final_books_df)
 
 
@@ -45,7 +32,7 @@ final_books_df['match_score'] = [
     for row_title, list_title in zip(final_books_df['full_title'], titles_l)
 ]
 
-final_books_df = final_books_df[final_books_df['match_score'] >= match_score]
+final_books_df = final_books_df[final_books_df['match_score'] >= MATCH_SCORE]
 print(final_books_df)
 
 
