@@ -21,7 +21,7 @@ FORCE_RUN = False
 MATCH_SCORE = 70
 
 
-
+## Begin the script
 final_books_df = check_to_run_initial_data_load(CACHE_PATH,titles_l,authors_l, FORCE_RUN)
 print(final_books_df)
 

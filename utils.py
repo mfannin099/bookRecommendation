@@ -2,6 +2,7 @@ import os
 import requests
 import pandas as pd
 import numpy as np
+# import pyarrow
 # from dotenv import load_dotenv
 # load_dotenv()
 # API_KEY = os.getenv("API_KEY")
@@ -46,12 +47,13 @@ authors_l = [
 # Begin Function Definitions
 def check_to_run_initial_data_load(CACHE_PATH,titles_l,authors_l, FORCE_RUN):
     if os.path.exists(CACHE_PATH)  and not FORCE_RUN:
-        print("False")
+        # print("False") # For Debugging
         return pd.read_parquet(CACHE_PATH)
         
     else:
+        # print("True") # For Debugging
         create_library(titles_l, authors_l)
-        print("True")
+        
     return pd.read_parquet(CACHE_PATH)
 
 def create_library(*args):
@@ -75,6 +77,7 @@ def create_library(*args):
         df['title']  # If no
     )
 
+    df.to_csv("library.csv")
     df.to_parquet("library.parquet")
 
 def pull_from_google_books(url):
