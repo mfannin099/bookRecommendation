@@ -7,3 +7,4 @@ ipykernel
 scikit-learn
 rake-nltk
 keybert
+summa
