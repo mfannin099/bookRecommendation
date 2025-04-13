@@ -45,7 +45,9 @@ authors_l = [
 
 ]
 
-
+######################
+######################
+######################
 
 # Begin Function Definitions
 def check_to_run_initial_data_load(CACHE_PATH,titles_l,authors_l, FORCE_RUN):
@@ -132,6 +134,56 @@ def clean_data_for_tfidf(df, MATCH_SCORE, LAST_N_BOOKS,titles_l):
     )
 
     return df
+
+def tfidf(df, terms):
+    # TF-IDF vectorization
+    tfidf = TfidfVectorizer(stop_words='english')
+    X = tfidf.fit_transform(df['description'])
+
+    # Get feature names and sum TF-IDF scores across all documents
+    feature_names = tfidf.get_feature_names_out()
+    tfidf_scores = X.sum(axis=0).A1  # Flatten the matrix to 1D array
+
+    top_indices = tfidf_scores.argsort()[-terms:][::-1]
+    top_keywords = [feature_names[i] for i in top_indices]
+
+    # Formating
+    tfidf_search_query = " ".join(top_keywords)
+
+    return tfidf_search_query
+
+
+def get_book_recs_from_api(search_query, n):
+
+    url = f"https://www.googleapis.com/books/v1/volumes?q={search_query}&maxResults={n}"
+
+    response = requests.get(url)
+
+    if response.status_code == 200:
+        data = response.json()
+
+        return_df = pd.DataFrame()
+        book = []
+        for item in data.get('items', [])[:n]:
+            volume_info = item.get('volumeInfo', {})
+
+            # print(volume_info)
+            
+            book.append({
+                'title': volume_info.get('title'),
+                'subtitle': volume_info.get('subtitle'),
+                'authors': volume_info.get('authors'),
+                'pulishedDate': volume_info.get('publishedDate'),
+                'pageCount': volume_info.get('pageCount'),
+                'categories': volume_info.get('categories'),
+                'description': volume_info.get('description')    
+
+            })
+            return_df = pd.DataFrame(book)
+        return return_df
+    else:
+        print("Error:", response.status_code)
+        pass
 
 
 

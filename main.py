@@ -12,6 +12,7 @@ from thefuzz import fuzz, process
 
 ##Importing Utils Functions
 from utils import check_to_run_initial_data_load, pull_from_google_books, create_library,clean_data_for_tfidf
+from utils import tfidf, get_book_recs_from_api
 from utils import titles_l # Input data
 from utils import authors_l # Input data
 
@@ -23,15 +24,16 @@ FORCE_RUN = False
 MATCH_SCORE = 70
 LAST_N_BOOKS = 10
 TERMS_IN_SEARCH_QUERY = 7
+BOOKS_TO_RETURN = 30 # Max is 40... Per API docs
 
 
 ## Begin the script
 final_books_df = check_to_run_initial_data_load(CACHE_PATH,titles_l,authors_l, FORCE_RUN)
 final_books_df = clean_data_for_tfidf(final_books_df,MATCH_SCORE,LAST_N_BOOKS,titles_l)
+search_query = tfidf(df=final_books_df, terms = TERMS_IN_SEARCH_QUERY)
+recs_from_google = get_book_recs_from_api(search_query=search_query,n=BOOKS_TO_RETURN)
 
-
-print(final_books_df)
-
+print(recs_from_google)
 
 
 ## Next steps here:
