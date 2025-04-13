@@ -1,11 +1,14 @@
 import os 
 import requests
-import pandas as pd
-import numpy as np
-# import pyarrow
 # from dotenv import load_dotenv
 # load_dotenv()
 # API_KEY = os.getenv("API_KEY")
+import pandas as pd
+import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
+import re 
+import string
+from thefuzz import fuzz, process
 
 
 titles_l = [
@@ -107,6 +110,29 @@ def pull_from_google_books(url):
         return df
     else:
         print("Error:", response.status_code)
+
+def clean_data_for_tfidf(df, MATCH_SCORE, LAST_N_BOOKS,titles_l):
+    # Create the score column by directly comparing row to list element at same index
+    df['match_score'] = [
+    fuzz.partial_ratio(row_title, list_title) 
+    for row_title, list_title in zip(df['full_title'], titles_l)
+    ]
+
+    # Filtering to scores only greater than match score
+    df = df[df['match_score'] >= MATCH_SCORE]
+
+    # Error handling (if length is longer than LAST N BOOKS everything is fine) else.... just return the df
+    if len(df) > LAST_N_BOOKS:
+        df = df.tail(LAST_N_BOOKS)
+    else:
+        pass
+
+    df['description'] = df['description'].astype(str).apply(
+        lambda x: re.sub(f"[{re.escape(string.punctuation)}]", "", x)
+    )
+
+    return df
+
 
 
 
