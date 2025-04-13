@@ -6,5 +6,4 @@ pyarrow
 ipykernel
 scikit-learn
 rake-nltk
-string
-re
+keybert
