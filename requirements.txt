@@ -4,3 +4,7 @@ numpy
 thefuzz
 pyarrow
 ipykernel
+scikit-learn
+rake-nltk
+string
+re
