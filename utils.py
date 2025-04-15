@@ -12,45 +12,6 @@ import string
 from thefuzz import fuzz, process
 
 
-
-# titles_l = [
-#     "Why Machines learn",
-#     "The Mental Game Winning the war within your mind",
-#     "better small talk",
-#     "Bullshit Jobs",
-#     "The Science of Self-Learning",
-#     "Zen Golf",
-#     "Netflix Powerful: Building a Culture of Freedom and Responsibility",
-#     "Happier Hour",
-#     "The Fourth Turning An American Prophecy What the cycles of history tell us about Americas nrxt Rendezvous with Destiny",
-#     "The Ten Day MBA",
-#     "Humor, Seriously",
-#     "How the World Ran out of Everything Inside the Global Supply Chain",
-#     "The Great Game of Business The Only Sensible Way to Run a Company"
-
-# ] 
-
-# authors_l = [
-#     "Anil Ananthaswamy",
-#     "Darrin Donnelly",
-#     "Patrick King",
-#     "David Graeber",
-#     "Peter Hollins",
-#     "Dr Joesph Parent",
-#     "Patty McCord",
-#     "Cassie Holmes, phD",
-#     "William Strauss & Neil Howe",
-#     "Steven Silbiger",
-#     "Jennifer Aaker & Naomi Bagdonas",
-#     "Peter S. Goodman",
-#     "Jack Stack"
-
-# ]
-
-######################
-######################
-######################
-
 # Begin Function Definitions
 
 def read_data(data_path1, data_path2):
