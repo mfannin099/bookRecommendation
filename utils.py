@@ -11,6 +11,7 @@ import string
 from thefuzz import fuzz, process
 
 
+
 titles_l = [
     "Why Machines learn",
     "The Mental Game Winning the war within your mind",
@@ -50,19 +51,40 @@ authors_l = [
 ######################
 
 # Begin Function Definitions
-def check_to_run_initial_data_load(CACHE_PATH,titles_l,authors_l, FORCE_RUN):
+
+def read_data(data_path1, data_path2):
+
+    if not os.path.isfile(data_path1):
+        raise FileNotFoundError(f"File not found: {data_path1}")
+        return None
+    if not os.path.isfile(data_path2):
+        raise FileNotFoundError(f"File not found: {data_path2}")
+        return None
+
+    with open(data_path1, 'r', encoding='utf-8') as file:
+        authors_l = [line.strip() for line in file if line.strip()]
+    with open(data_path2, 'r', encoding='utf-8') as file:
+        titles_l = [line.strip() for line in file if line.strip()]
+
+    return authors_l,titles_l
+
+
+def check_to_run_initial_data_load(CACHE_PATH,data_path1,data_path2, FORCE_RUN):
     if os.path.exists(CACHE_PATH)  and not FORCE_RUN:
         # print("False") # For Debugging
         return pd.read_parquet(CACHE_PATH)
         
     else:
         # print("True") # For Debugging
+        authors_l, titles_l = read_data(data_path1,data_path2)
         create_library(titles_l, authors_l)
         
     return pd.read_parquet(CACHE_PATH)
 
+
 def create_library(*args):
-    df = pd.DataFrame()
+    df = pd.DataFrame(columns=["title", "subtitle", "authors", "pulishedDate", "pageCount",
+                               "categories",  "description"])
     titles_l, authors_l = args
 
     for title, author in zip(titles_l, authors_l):
@@ -74,7 +96,9 @@ def create_library(*args):
         url = f"https://www.googleapis.com/books/v1/volumes?q={search_term}+inauthor{author}&maxResults=1&orderBy={relevance}"
         book_data = pull_from_google_books(url)
 
-        df = df.append(book_data)
+        print(book_data)
+
+        df = pd.concat([df, book_data], ignore_index=True)
 
     df['full_title'] = np.where(
         df['subtitle'].notnull(),  # Check if subtitle exists
@@ -84,6 +108,7 @@ def create_library(*args):
 
     df.to_csv("library.csv")
     df.to_parquet("library.parquet")
+
 
 def pull_from_google_books(url):
 
@@ -113,6 +138,7 @@ def pull_from_google_books(url):
     else:
         print("Error:", response.status_code)
 
+
 def clean_data_for_tfidf(df, MATCH_SCORE, LAST_N_BOOKS,titles_l):
     # Create the score column by directly comparing row to list element at same index
     df['match_score'] = [
@@ -134,6 +160,7 @@ def clean_data_for_tfidf(df, MATCH_SCORE, LAST_N_BOOKS,titles_l):
     )
 
     return df
+
 
 def tfidf(df, terms):
     # TF-IDF vectorization
