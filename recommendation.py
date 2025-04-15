@@ -35,7 +35,7 @@ final_books_df,titles_l = check_to_run_initial_data_load(CACHE_PATH, AUTHORS_PAT
 final_books_df = clean_data_for_tfidf(final_books_df,MATCH_SCORE,LAST_N_BOOKS,titles_l) # Cleaning the data
 search_query = tfidf(df=final_books_df, terms = TERMS_IN_SEARCH_QUERY) # Returns optimized query for future recommendations
 recs_from_google = get_book_recs_from_api(search_query=search_query,n=BOOKS_TO_RETURN) # Retrieving the recommendations and returns a dataframe
-final = create_final_recs(recs_from_google, search_query)
+final = create_final_recs(recs_from_google, search_query) # Creates and returns the final recommendations using Jaccard Similarity
 print(final)
 
 
