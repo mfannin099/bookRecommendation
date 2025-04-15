@@ -6,45 +6,46 @@ import requests
 import pandas as pd
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics import jaccard_score
 import re 
 import string
 from thefuzz import fuzz, process
 
 
 
-titles_l = [
-    "Why Machines learn",
-    "The Mental Game Winning the war within your mind",
-    "better small talk",
-    "Bullshit Jobs",
-    "The Science of Self-Learning",
-    "Zen Golf",
-    "Netflix Powerful: Building a Culture of Freedom and Responsibility",
-    "Happier Hour",
-    "The Fourth Turning An American Prophecy What the cycles of history tell us about Americas nrxt Rendezvous with Destiny",
-    "The Ten Day MBA",
-    "Humor, Seriously",
-    "How the World Ran out of Everything Inside the Global Supply Chain",
-    "The Great Game of Business The Only Sensible Way to Run a Company"
+# titles_l = [
+#     "Why Machines learn",
+#     "The Mental Game Winning the war within your mind",
+#     "better small talk",
+#     "Bullshit Jobs",
+#     "The Science of Self-Learning",
+#     "Zen Golf",
+#     "Netflix Powerful: Building a Culture of Freedom and Responsibility",
+#     "Happier Hour",
+#     "The Fourth Turning An American Prophecy What the cycles of history tell us about Americas nrxt Rendezvous with Destiny",
+#     "The Ten Day MBA",
+#     "Humor, Seriously",
+#     "How the World Ran out of Everything Inside the Global Supply Chain",
+#     "The Great Game of Business The Only Sensible Way to Run a Company"
 
-] 
+# ] 
 
-authors_l = [
-    "Anil Ananthaswamy",
-    "Darrin Donnelly",
-    "Patrick King",
-    "David Graeber",
-    "Peter Hollins",
-    "Dr Joesph Parent",
-    "Patty McCord",
-    "Cassie Holmes, phD",
-    "William Strauss & Neil Howe",
-    "Steven Silbiger",
-    "Jennifer Aaker & Naomi Bagdonas",
-    "Peter S. Goodman",
-    "Jack Stack"
+# authors_l = [
+#     "Anil Ananthaswamy",
+#     "Darrin Donnelly",
+#     "Patrick King",
+#     "David Graeber",
+#     "Peter Hollins",
+#     "Dr Joesph Parent",
+#     "Patty McCord",
+#     "Cassie Holmes, phD",
+#     "William Strauss & Neil Howe",
+#     "Steven Silbiger",
+#     "Jennifer Aaker & Naomi Bagdonas",
+#     "Peter S. Goodman",
+#     "Jack Stack"
 
-]
+# ]
 
 ######################
 ######################
@@ -72,14 +73,15 @@ def read_data(data_path1, data_path2):
 def check_to_run_initial_data_load(CACHE_PATH,data_path1,data_path2, FORCE_RUN):
     if os.path.exists(CACHE_PATH)  and not FORCE_RUN:
         # print("False") # For Debugging
-        return pd.read_parquet(CACHE_PATH)
+        authors_l, titles_l = read_data(data_path1,data_path2)
+        return pd.read_parquet(CACHE_PATH), titles_l
         
     else:
         # print("True") # For Debugging
         authors_l, titles_l = read_data(data_path1,data_path2)
         create_library(titles_l, authors_l)
         
-    return pd.read_parquet(CACHE_PATH)
+    return pd.read_parquet(CACHE_PATH), titles_l
 
 
 def create_library(*args):
@@ -95,8 +97,6 @@ def create_library(*args):
 
         url = f"https://www.googleapis.com/books/v1/volumes?q={search_term}+inauthor{author}&maxResults=1&orderBy={relevance}"
         book_data = pull_from_google_books(url)
-
-        print(book_data)
 
         df = pd.concat([df, book_data], ignore_index=True)
 
@@ -211,6 +211,22 @@ def get_book_recs_from_api(search_query, n):
     else:
         print("Error:", response.status_code)
         pass
+
+
+def create_final_recs(df, search_query):
+
+    search_query_set = set(search_query.lower().split())
+
+    def calculate_jaccard_similarity(description):
+        description_set = set(str(description).lower().split())
+        intersection = len(search_query_set.intersection(description_set))
+        union = len(search_query_set.union(description_set))
+        return intersection / union if union != 0 else 0
+
+    df['jaccard_similarity'] = df['description'].apply(calculate_jaccard_similarity)
+    df = df.sort_values(by='jaccard_similarity', ascending=False)
+
+    return df[['title', 'subtitle','authors']].head(10)
 
 
 
