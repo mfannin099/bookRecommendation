@@ -38,7 +38,9 @@ recs_from_google = get_book_recs_from_api(search_query=search_query,n=BOOKS_TO_R
 final = create_final_recs(recs_from_google, search_query)
 print(final)
 
+
 ## Next steps here:
 
 ## Convert functions to classes and methods...?
 ## Some sort of front end for the app.... Streamlit..., want to do something different (FLASK or something else)
+## Watch some flask tutorials and come back to this
