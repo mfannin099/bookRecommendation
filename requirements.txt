@@ -8,3 +8,4 @@ scikit-learn
 rake-nltk
 keybert
 summa
+flask

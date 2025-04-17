@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Book Input</title>
+</head>
+<body>
+
+    <div style="text-align: center;">
+        <h2>Welcome to Book Recommendation System</h2>
+    </div>
+
+    <!-- Form Section -->
+    <div style="max-width: 600px; margin: 0 auto;">
+        <form method="POST">
+            <fieldset>
+                <legend><strong>Enter Book and Author Details:</strong></legend>
+                <label for="book">Book Title:</label><br>
+                <input type="text" id="book" name="book" required><br><br>
+
+                <label for="author">Author:</label><br>
+                <input type="text" id="author" name="author" required><br><br>
+
+                <input type="submit" value="Submit">
+            </fieldset>
+        </form>
+    </div>
+
+    <!-- Display Submitted Book and Author -->
+    {% if book and author %}
+        <hr>
+        <div style="text-align: center;">
+            <h3>✅ You Just Entered:</h3>
+            <p><strong>Book:</strong> {{ book }}</p>
+            <p><strong>Author:</strong> {{ author }}</p>
+        </div>
+    {% endif %}
+
+    <hr>
+    <div style="max-width: 600px; margin: 0 auto; text-align: center;">
+        <h3>Your Book & Author Entries:</h3>
+        <ul style="list-style-type: none; padding: 0;">
+            {% for i in range(book_list|length - 1, -1, -1) %}
+                <li style="margin-bottom: 10px;">
+                    <strong>{{ book_list[i] }}</strong> by {{ author_list[i] }}
+
+                    <!-- Delete Button -->
+                    <form method="POST" action="/delete" style="display: inline;">
+                        <input type="hidden" name="index" value="{{ i }}">
+                        <input type="submit" value="🗑 Delete">
+                    </form>
+
+                    <!-- Edit Button -->
+                    <form method="GET" action="/edit" style="display: inline;">
+                        <input type="hidden" name="index" value="{{ i }}">
+                        <input type="submit" value="✏️ Edit">
+                    </form>
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+</body>
+</html>
