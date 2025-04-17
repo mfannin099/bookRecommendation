@@ -10,7 +10,7 @@ from utils import (
 AUTHORS_PATH = "data/authors.txt" # User input data
 TITLES_PATH = "data/titles.txt" # User input data
 CACHE_PATH = "library.parquet" # Path for data cache
-FORCE_RUN = False
+FORCE_RUN = True
 
 MATCH_SCORE = 70 # Fuzzy Euzzy - validate results from Google API
 LAST_N_BOOKS = 10 # Number of books to use for TFIDF
@@ -25,7 +25,7 @@ def run_recommendation_pipeline():
     search_query = tfidf(df=final_books_df, terms = TERMS_IN_SEARCH_QUERY) # Returns optimized query for future recommendations
     recs_from_google = get_book_recs_from_api(search_query=search_query,n=BOOKS_TO_RETURN) # Retrieving the recommendations and returns a dataframe
     final = create_final_recs(recs_from_google, search_query) # Creates and returns the final recommendations using Jaccard Similarity
+    print(final)
+    print("---------------------")
     return final
 
-recs = run_recommendation_pipeline()
-print(recs)

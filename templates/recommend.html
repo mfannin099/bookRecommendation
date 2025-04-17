@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Book Recommendations</title>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .rec-card {
+            border: 1px solid #ccc;
+            padding: 16px;
+            margin-bottom: 12px;
+            border-radius: 8px;
+        }
+        .rec-card h3 { margin: 0; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>📚 Your Recommendations</h2>
+        <a href="/">← Back to Home</a>
+        <hr>
+
+        {% if recommendations %}
+            {% for book in recommendations %}
+                <div class="rec-card">
+                    <h3>{{ book.title }}{% if book.subtitle %}: {{ book.subtitle }}{% endif %}</h3>
+                    <p><strong>Author:</strong> {{ book.authors }}</p>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p>No recommendations found.</p>
+        {% endif %}
+    </div>
+
+</body>
+</html>

@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect
 import os
+from recommend import run_recommendation_pipeline
 
 app = Flask(__name__)
 
@@ -64,9 +65,24 @@ def edit_entry():
     current_author = author_list[index]
     return render_template('edit.html', index=index, book=current_book, author=current_author)
 
-@app.route('/another_page')
-def another_page():
-    return "<h2>This is another page</h2>"
+@app.route('/recommend', methods=["GET"])
+def recommend():
+    try:
+        # Check if titles and authors lists have content
+        with open('data/titles.txt', 'r') as f_titles, open('data/authors.txt', 'r') as f_authors:
+            titles = [line.strip() for line in f_titles if line.strip()]
+            authors = [line.strip() for line in f_authors if line.strip()]
+
+        if not titles or not authors:
+            return "<h2>⚠️ You must enter at least one book and author before getting recommendations. <a href='/'>Go back</a></h2>"
+
+        # Run the pipeline if there is at least one entry
+        recommendations = run_recommendation_pipeline()
+        return render_template("recommend.html", recommendations=recommendations.to_dict(orient='records'))
+
+    except Exception as e:
+        error_message = f"❌ Error: {e}. Please enter more books."
+        return render_template("error.html", message=error_message)
 
 if __name__ == '__main__':
     app.run(debug=True)

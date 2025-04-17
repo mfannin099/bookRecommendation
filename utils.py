@@ -14,6 +14,20 @@ from thefuzz import fuzz, process
 
 # Begin Function Definitions
 
+def check_to_run_initial_data_load(CACHE_PATH,data_path1,data_path2, FORCE_RUN):
+    if os.path.exists(CACHE_PATH)  and not FORCE_RUN:
+        # print("False") # For Debugging
+        authors_l, titles_l = read_data(data_path1,data_path2)
+        return pd.read_parquet(CACHE_PATH), titles_l
+        
+    else:
+        # print("True") # For Debugging
+        authors_l, titles_l = read_data(data_path1,data_path2)
+        create_library(titles_l, authors_l)
+        
+    return pd.read_parquet(CACHE_PATH), titles_l
+
+
 def read_data(data_path1, data_path2):
 
     if not os.path.isfile(data_path1):
@@ -29,20 +43,6 @@ def read_data(data_path1, data_path2):
         titles_l = [line.strip() for line in file if line.strip()]
 
     return authors_l,titles_l
-
-
-def check_to_run_initial_data_load(CACHE_PATH,data_path1,data_path2, FORCE_RUN):
-    if os.path.exists(CACHE_PATH)  and not FORCE_RUN:
-        # print("False") # For Debugging
-        authors_l, titles_l = read_data(data_path1,data_path2)
-        return pd.read_parquet(CACHE_PATH), titles_l
-        
-    else:
-        # print("True") # For Debugging
-        authors_l, titles_l = read_data(data_path1,data_path2)
-        create_library(titles_l, authors_l)
-        
-    return pd.read_parquet(CACHE_PATH), titles_l
 
 
 def create_library(*args):
@@ -67,7 +67,8 @@ def create_library(*args):
         df['title']  # If no
     )
 
-    df.to_csv("library.csv")
+    ##Uncomment if you want output
+    #df.to_csv("library.csv")
     df.to_parquet("library.parquet")
 
 
@@ -107,11 +108,13 @@ def clean_data_for_tfidf(df, MATCH_SCORE, LAST_N_BOOKS,titles_l):
     for row_title, list_title in zip(df['full_title'], titles_l)
     ]
 
-    # Filtering to scores only greater than match score
-    df = df[df['match_score'] >= MATCH_SCORE]
+ 
 
     # Error handling (if length is longer than LAST N BOOKS everything is fine) else.... just return the df
     if len(df) > LAST_N_BOOKS:
+
+        # Filtering to scores only greater than match score
+        df = df[df['match_score'] >= MATCH_SCORE]
         df = df.tail(LAST_N_BOOKS)
     else:
         pass
