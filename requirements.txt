@@ -9,3 +9,4 @@ rake-nltk
 keybert
 summa
 flask
+gunicorn
