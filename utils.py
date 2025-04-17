@@ -190,6 +190,9 @@ def create_final_recs(df, search_query):
     df['jaccard_similarity'] = df['description'].apply(calculate_jaccard_similarity)
     df = df.sort_values(by='jaccard_similarity', ascending=False)
 
+    # Cleaning up author column before displaying
+    df['authors'] = df['authors'].apply(lambda x: ', '.join(x) if isinstance(x, list) else str(x))
+
     return df[['title', 'subtitle','authors']].head(10)
 
 

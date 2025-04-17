@@ -25,7 +25,7 @@
             {% for book in recommendations %}
                 <div class="rec-card">
                     <h3>{{ book.title }}{% if book.subtitle %}: {{ book.subtitle }}{% endif %}</h3>
-                    <p><strong>Author:</strong> {{ book.authors }}</p>
+                    <p><strong>Author(s):</strong> {{ book.authors }}</p>
                 </div>
             {% endfor %}
         {% else %}
