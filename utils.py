@@ -155,7 +155,7 @@ class BookRecommender:
     
     def fetch_recommendations(self, search_query):
         """Fetch book recommendations from Google Books API."""
-        url = f"https://www.googleapis.com/books/v1/volumes?q={search_query}&maxResults={self.books_to_return}"
+        url = f"https://www.googleapis.com/books/v1/volumes?q={search_query}&key={API_KEY}&maxResults={self.books_to_return}"
         
         try:
             response = requests.get(url)
@@ -213,15 +213,12 @@ class BookRecommender:
         
         # Clean and filter data
         cleaned_df = self.clean_and_filter_library()
-        print(cleaned_df)
         
         # Generate search query using TF-IDF
         search_query = self.generate_search_query(cleaned_df)
-        print(search_query)
         
         # Fetch recommendations from API
         recommendations_df = self.fetch_recommendations(search_query)
-        print(recommendations_df)
         
         # Rank and return final recommendations
         final_recommendations = self.rank_by_jaccard_similarity(
