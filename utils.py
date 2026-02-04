@@ -39,165 +39,183 @@ def read_data(data_path1, data_path2):
     with open(data_path2, 'r', encoding='utf-8') as file:
         titles_l = [line.strip() for line in file if line.strip()]
 
-    return authors_l,titles_l
+        return self.authors_list, self.titles_list
 
-
-def create_library(*args):
-    df = pd.DataFrame(columns=["title", "subtitle", "authors", "pulishedDate", "pageCount",
-                               "categories",  "description"])
-    titles_l, authors_l = args
-
-    for title, author in zip(titles_l, authors_l):
-
-        search_term = title
-        author = author
-        relevance = 'relevance'
-
-        url = f"https://www.googleapis.com/books/v1/volumes?q={search_term}+inauthor{author}&maxResults=1&orderBy={relevance}"
-        book_data = pull_from_google_books(url)
-
-        df = pd.concat([df, book_data], ignore_index=True)
-
-    df['full_title'] = np.where(
-        df['subtitle'].notnull(),  # Check if subtitle exists
-        df['title'] + " " + df['subtitle'],  # If yes
-        df['title']  # If no
-    )
-
-    ##Uncomment if you want output
-    #df.to_csv("library.csv")
-    df.to_parquet("library.parquet")
-
-
-def pull_from_google_books(url):
-
-    response = requests.get(url)
-
-    if response.status_code == 200:
-        data = response.json()
-
-        book = []
-        volume_info = data['items'][0]['volumeInfo'] 
-
-        # print(volume_info)
+    def fetch_book_from_google(self, title, author):
+        """Fetch book data from Google Books API."""
+        time.sleep(1)
+        url = f"https://www.googleapis.com/books/v1/volumes?q={title}+inauthor:{author}&key={API_KEY}&maxResults=1"
         
-        book.append({
-            'title': volume_info.get('title'),
-            'subtitle': volume_info.get('subtitle'),
-            'authors': volume_info.get('authors'),
-            'pulishedDate': volume_info.get('publishedDate'),
-            'pageCount': volume_info.get('pageCount'),
-            'categories': volume_info.get('categories'),
-            'description': volume_info.get('description'),
+        try:
+            response = requests.get(url)
             
+            if response.status_code == 200:
+                data = response.json()
+                
+                if 'items' in data and len(data['items']) > 0:
+                    volume_info = data['items'][0]['volumeInfo']
+                    
+                    book_data = {
+                        'title': volume_info.get('title'),
+                        'subtitle': volume_info.get('subtitle'),
+                        'authors': volume_info.get('authors'),
+                        'publishedDate': volume_info.get('publishedDate'),
+                        'pageCount': volume_info.get('pageCount'),
+                        'categories': volume_info.get('categories'),
+                        'description': volume_info.get('description'),
+                    }
+                    
+                    return pd.DataFrame([book_data])
+            else:
+                print(f"Error fetching book: {response.status_code}")
+                
+        except Exception as e:
+            print(f"Exception while fetching book: {e}")
+        
+        return pd.DataFrame()
 
-        })
-        df = pd.DataFrame(book)
+    def build_library(self):
+        """Build library from input titles and authors using Google Books API."""
+        df = pd.DataFrame(columns=["title", "subtitle", "authors", "publishedDate", 
+                                "pageCount", "categories", "description"])
+        
+        for title, author in zip(self.titles_list, self.authors_list):
+            print(title)
+            book_data = self.fetch_book_from_google(title, author)
+            df = pd.concat([df, book_data], ignore_index=True)
+        
+        # Create full_title column
+        df['full_title'] = np.where(
+            df['subtitle'].notnull(),
+            df['title'] + " " + df['subtitle'],
+            df['title']
+        )
+        
+        # Save to cache
+        df.to_parquet(self.cache_path)
+        self.library_df = df
+        
         return df
-    else:
-        print("Error:", response.status_code)
 
-
-def clean_data_for_tfidf(df, MATCH_SCORE, LAST_N_BOOKS,titles_l):
-    # Create the score column by directly comparing row to list element at same index
-    df['match_score'] = [
-    fuzz.partial_ratio(row_title, list_title) 
-    for row_title, list_title in zip(df['full_title'], titles_l)
-    ]
-
- 
-
-    # Error handling (if length is longer than LAST N BOOKS everything is fine) else.... just return the df
-    if len(df) > LAST_N_BOOKS:
-
-        # Filtering to scores only greater than match score
-        df = df[df['match_score'] >= MATCH_SCORE]
-        df = df.tail(LAST_N_BOOKS)
-    else:
-        pass
-
-    df['description'] = df['description'].astype(str).apply(
-        lambda x: re.sub(f"[{re.escape(string.punctuation)}]", "", x)
-    )
-
-    return df
-
-
-def tfidf(df, terms):
-    # TF-IDF vectorization
-    tfidf = TfidfVectorizer(stop_words='english')
-    X = tfidf.fit_transform(df['description'])
-
-    # Get feature names and sum TF-IDF scores across all documents
-    feature_names = tfidf.get_feature_names_out()
-    tfidf_scores = X.sum(axis=0).A1  # Flatten the matrix to 1D array
-
-    top_indices = tfidf_scores.argsort()[-terms:][::-1]
-    top_keywords = [feature_names[i] for i in top_indices]
-
-    # Formating
-    tfidf_search_query = " ".join(top_keywords)
-
-    return tfidf_search_query
-
-
-def get_book_recs_from_api(search_query, n):
-
-    url = f"https://www.googleapis.com/books/v1/volumes?q={search_query}&maxResults={n}"
-
-    response = requests.get(url)
-
-    if response.status_code == 200:
-        data = response.json()
-
-        return_df = pd.DataFrame()
-        book = []
-        for item in data.get('items', [])[:n]:
-            volume_info = item.get('volumeInfo', {})
-
-            # print(volume_info)
+    def load_or_build_library(self):
+        """Load library from cache or build it if needed."""
+        self.read_data()
+        
+        if os.path.exists(self.cache_path) and not self.force_run:
+            self.library_df = pd.read_parquet(self.cache_path)
+        else:
+            self.library_df = self.build_library()
+        
+        return self.library_df
+    
+    def clean_and_filter_library(self):
+        """Clean library data and filter based on match scores."""
+        df = self.library_df.copy()
+        
+        # Calculate fuzzy match scores
+        df['match_score'] = [
+            fuzz.partial_ratio(row_title, list_title)
+            for row_title, list_title in zip(df['full_title'], self.titles_list)
+        ]
+        
+        # Filter and select last N books
+        if len(df) > self.last_n_books:
+            df = df[df['match_score'] >= self.match_score]
+            df = df.tail(self.last_n_books)
+        
+        # Clean descriptions for TF-IDF
+        df['description'] = df['description'].astype(str).apply(
+            lambda x: re.sub(f"[{re.escape(string.punctuation)}]", "", x)
+        )
+        
+        return df
+    
+    def generate_search_query(self, df):
+        """Generate optimized search query using TF-IDF."""
+        vectorizer = TfidfVectorizer(stop_words='english')
+        tfidf_matrix = vectorizer.fit_transform(df['description'])
+        
+        # Get feature names and sum TF-IDF scores
+        feature_names = vectorizer.get_feature_names_out()
+        tfidf_scores = tfidf_matrix.sum(axis=0).A1
+        
+        # Get top terms
+        top_indices = tfidf_scores.argsort()[-self.terms_in_search_query:][::-1]
+        top_keywords = [feature_names[i] for i in top_indices]
+        
+        search_query = " ".join(top_keywords)
+        return search_query
+    
+    def fetch_recommendations(self, search_query):
+        """Fetch book recommendations from Google Books API."""
+        url = f"https://www.googleapis.com/books/v1/volumes?q={search_query}&key={API_KEY}&maxResults={self.books_to_return}"
+        
+        try:
+            response = requests.get(url)
             
-            book.append({
-                'title': volume_info.get('title'),
-                'subtitle': volume_info.get('subtitle'),
-                'authors': volume_info.get('authors'),
-                'pulishedDate': volume_info.get('publishedDate'),
-                'pageCount': volume_info.get('pageCount'),
-                'categories': volume_info.get('categories'),
-                'description': volume_info.get('description')    
-
-            })
-            return_df = pd.DataFrame(book)
-        return return_df
-    else:
-        print("Error:", response.status_code)
-        pass
-
-
-def create_final_recs(df, search_query):
-
-    search_query_set = set(search_query.lower().split())
-
-    def calculate_jaccard_similarity(description):
-        description_set = set(str(description).lower().split())
-        intersection = len(search_query_set.intersection(description_set))
-        union = len(search_query_set.union(description_set))
-        return intersection / union if union != 0 else 0
-
-    df['jaccard_similarity'] = df['description'].apply(calculate_jaccard_similarity)
-    df = df.sort_values(by='jaccard_similarity', ascending=False)
-
-    # Cleaning up author column before displaying
-    df['authors'] = df['authors'].apply(lambda x: ', '.join(x) if isinstance(x, list) else str(x))
-
-    return df[['title', 'subtitle','authors']].head(10)
-
-
-
-
-
-
-
-
-
-
+            if response.status_code == 200:
+                data = response.json()
+                
+                books = []
+                for item in data.get('items', [])[:self.books_to_return]:
+                    volume_info = item.get('volumeInfo', {})
+                    
+                    books.append({
+                        'title': volume_info.get('title'),
+                        'subtitle': volume_info.get('subtitle'),
+                        'authors': volume_info.get('authors'),
+                        'publishedDate': volume_info.get('publishedDate'),
+                        'pageCount': volume_info.get('pageCount'),
+                        'categories': volume_info.get('categories'),
+                        'description': volume_info.get('description')
+                    })
+                
+                return pd.DataFrame(books)
+            else:
+                print(f"Error fetching recommendations: {response.status_code}")
+                
+        except Exception as e:
+            print(f"Exception while fetching recommendations: {e}")
+        
+        return pd.DataFrame()
+    
+    def rank_by_jaccard_similarity(self, df, search_query):
+        """Rank recommendations using Jaccard similarity."""
+        search_query_set = set(search_query.lower().split())
+        
+        def calculate_jaccard(description):
+            description_set = set(str(description).lower().split())
+            intersection = len(search_query_set.intersection(description_set))
+            union = len(search_query_set.union(description_set))
+            return intersection / union if union != 0 else 0
+        
+        df['jaccard_similarity'] = df['description'].apply(calculate_jaccard)
+        df = df.sort_values(by='jaccard_similarity', ascending=False)
+        
+        # Format authors column
+        df['authors'] = df['authors'].apply(
+            lambda x: ', '.join(x) if isinstance(x, list) else str(x)
+        )
+        
+        return df[['title', 'subtitle', 'authors']].head(10)
+    
+    def get_recommendations(self):
+        """Main method to run the complete recommendation pipeline."""
+        # Load or build library
+        self.load_or_build_library()
+        
+        # Clean and filter data
+        cleaned_df = self.clean_and_filter_library()
+        
+        # Generate search query using TF-IDF
+        search_query = self.generate_search_query(cleaned_df)
+        
+        # Fetch recommendations from API
+        recommendations_df = self.fetch_recommendations(search_query)
+        
+        # Rank and return final recommendations
+        final_recommendations = self.rank_by_jaccard_similarity(
+            recommendations_df, search_query
+        )
+        
+        return final_recommendations
