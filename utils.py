@@ -1,8 +1,5 @@
 import os 
 import requests
-# from dotenv import load_dotenv
-# load_dotenv()
-# API_KEY = os.getenv("API_KEY")
 import pandas as pd
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -20,7 +17,7 @@ def check_to_run_initial_data_load(CACHE_PATH,data_path1,data_path2, FORCE_RUN):
         authors_l, titles_l = read_data(data_path1,data_path2)
         return pd.read_parquet(CACHE_PATH), titles_l
         
-    else:
+    else: # Typically this will be done
         # print("True") # For Debugging
         authors_l, titles_l = read_data(data_path1,data_path2)
         create_library(titles_l, authors_l)
