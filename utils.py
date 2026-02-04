@@ -7,37 +7,44 @@ from sklearn.metrics import jaccard_score
 import re 
 import string
 from thefuzz import fuzz, process
+import time
+from dotenv import load_dotenv
+
+load_dotenv()
+API_KEY = os.getenv("GOOGLE_BOOKS_API_KEY")
 
 
-# Begin Function Definitions
+class BookRecommender:
+    
+    def __init__(self, authors_path, titles_path, cache_path="library.parquet", 
+                 force_run=False, match_score=70, last_n_books=10, 
+                 terms_in_search_query=10, books_to_return=30):
 
-def check_to_run_initial_data_load(CACHE_PATH,data_path1,data_path2, FORCE_RUN):
-    if os.path.exists(CACHE_PATH)  and not FORCE_RUN:
-        # print("False") # For Debugging
-        authors_l, titles_l = read_data(data_path1,data_path2)
-        return pd.read_parquet(CACHE_PATH), titles_l
+        self.authors_path = authors_path
+        self.titles_path = titles_path
+        self.cache_path = cache_path
+        self.force_run = force_run
+        self.match_score = match_score
+        self.last_n_books = last_n_books
+        self.terms_in_search_query = terms_in_search_query
+        self.books_to_return = books_to_return
         
-    else: # Typically this will be done
-        # print("True") # For Debugging
-        authors_l, titles_l = read_data(data_path1,data_path2)
-        create_library(titles_l, authors_l)
+        self.library_df = None
+        self.titles_list = None
+        self.authors_list = None
+
+    def read_data(self):
+        """Read authors and titles from input files."""
+        if not os.path.isfile(self.authors_path):
+            raise FileNotFoundError(f"File not found: {self.authors_path}")
+        if not os.path.isfile(self.titles_path):
+            raise FileNotFoundError(f"File not found: {self.titles_path}")
         
-    return pd.read_parquet(CACHE_PATH), titles_l
-
-
-def read_data(data_path1, data_path2):
-
-    if not os.path.isfile(data_path1):
-        raise FileNotFoundError(f"File not found: {data_path1}")
-        return None
-    if not os.path.isfile(data_path2):
-        raise FileNotFoundError(f"File not found: {data_path2}")
-        return None
-
-    with open(data_path1, 'r', encoding='utf-8') as file:
-        authors_l = [line.strip() for line in file if line.strip()]
-    with open(data_path2, 'r', encoding='utf-8') as file:
-        titles_l = [line.strip() for line in file if line.strip()]
+        with open(self.authors_path, 'r', encoding='utf-8') as file:
+            self.authors_list = [line.strip() for line in file if line.strip()]
+        
+        with open(self.titles_path, 'r', encoding='utf-8') as file:
+            self.titles_list = [line.strip() for line in file if line.strip()]
 
         return self.authors_list, self.titles_list
 
