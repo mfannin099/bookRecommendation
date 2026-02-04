@@ -1,32 +1,38 @@
-### Stock Analysis/Stock Research & ML Prediction
-A personal data science project to analyze stocks inputted by user. In addition, a prediction for the closing price for the next N-days can be created. Also, Streamlit app (hosted on Streamlits website... ML model doesn't work well) and Voila app are there.
+🛠️ How It Works
+The recommendation engine follows a specific data pipeline to ensure relevance:
 
+User Input: Accepts book titles or authors through a Flask frontend.
 
+Data Acquisition: Queries the Google Books API to retrieve metadata (descriptions, categories, etc.).
 
+Data Cleaning: Processes text data to prepare it for similarity analysis.
 
-### 📥 Getting Started
-Clone the repository:
+Similarity Engine: Uses Jaccard Similarity (implemented in utils.py) to compare book attributes and find the closest matches.
 
-git clone [https://github.com/mfannin099/stock_analysis.git](https://github.com/mfannin099/bookRecommendation.git)
+Output: Returns a curated list of recommendations back to the user interface.
 
-cd bookRecommendation (Pretty sure .venv is the correct virtual enviroment I used.... has newer version of python on it)
-Install required packages:
-pip install -r requirements.txt
+📁 Key Files
+main.py: The core Flask application handling routes and user interaction.
 
-Flask: python main.py
+utils.py / recommend.py: The "brains" of the operation. Contains logic for API calls, data cleaning, and the recommendation workflow.
 
-### Important Files:
+notebooks/nltk_playground.ipynb: An exploratory sandbox where NLTK and NLP strategies are tested.
 
-- main.py                      ...... Flask app that allows user to input books/authors.. calls the google books API, and creates recommendations
+library.parquet: Local data storage for optimized performance during processing.
 
-- recommend.py    ...... python file that holds all of the functions in .utils, and when called runs the workflow. That is grabs data from google books api, cleans data, creates a search query, returns search query into google api, retrieves recommendations, then returns recommendations.
-  
-- notebooks/nltk_playground.ipynb ...... notebook to test various natural language approaches
+Dockerfile: Containerization settings for easy deployment.
 
-### Learnings/Practice:
-- Flask
-- Natural Language Processing
-- Recommendation Systems
+🧪 Tech Stack & Learnings
+This project served as a practical application of several data science and web development concepts:
 
+Web Framework: Flask
+
+Natural Language Processing: NLTK (Tokenization, cleaning)
+
+Recommendation Systems: Content-based filtering using Jaccard Similarity.
+
+Data Handling: Pandas and Parquet for efficient data storage.
+
+DevOps: Docker for environment consistency.
 
 
