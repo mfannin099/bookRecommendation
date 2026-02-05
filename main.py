@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect
 import os
 from utils import BookRecommender
+import atexit
 
 app = Flask(__name__)
 
@@ -10,6 +11,24 @@ DATA_FOLDER = 'data'
 AUTHORS_FILE = os.path.join(DATA_FOLDER, 'authors.txt')
 BOOKS_FILE = os.path.join(DATA_FOLDER, 'titles.txt')
 
+# Clear files on startup
+def clear_data_files():
+    if os.path.exists(BOOKS_FILE):
+        os.remove(BOOKS_FILE)
+    if os.path.exists(AUTHORS_FILE):
+        os.remove(AUTHORS_FILE)
+
+# Clear files on shutdown
+def cleanup():
+    clear_data_files()
+
+# Register cleanup function
+atexit.register(cleanup)
+
+# Clear on startup
+clear_data_files()
+
+# Rest of your code stays the same...
 def load_from_files():
     books = []
     authors = []
@@ -23,6 +42,8 @@ def load_from_files():
             authors = [line.strip() for line in f if line.strip()]
     
     return books, authors
+
+book_list, author_list = load_from_files()
 
 # Initialize lists from files
 book_list, author_list = load_from_files()
