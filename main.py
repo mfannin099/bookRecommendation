@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, redirect
 import os
-from recommend import run_recommendation_pipeline
+from utils import BookRecommender
 
 app = Flask(__name__)
 
@@ -10,8 +10,27 @@ DATA_FOLDER = 'data'
 AUTHORS_FILE = os.path.join(DATA_FOLDER, 'authors.txt')
 BOOKS_FILE = os.path.join(DATA_FOLDER, 'titles.txt')
 
+def load_from_files():
+    books = []
+    authors = []
+    
+    if os.path.exists(BOOKS_FILE):
+        with open(BOOKS_FILE, 'r') as f:
+            books = [line.strip() for line in f if line.strip()]
+    
+    if os.path.exists(AUTHORS_FILE):
+        with open(AUTHORS_FILE, 'r') as f:
+            authors = [line.strip() for line in f if line.strip()]
+    
+    return books, authors
+
+# Initialize lists from files
+book_list, author_list = load_from_files()
+
 # Function to save the lists to text files
 def save_to_files(book_list, author_list):
+    os.makedirs(DATA_FOLDER, exist_ok=True)
+    
     with open(BOOKS_FILE, 'w') as f:
         for book in book_list:
             f.write(f"{book}\n")
@@ -76,8 +95,14 @@ def recommend():
         if not titles or not authors:
             return "<h2>⚠️ You must enter at least one book and author before getting recommendations. <a href='/'>Go back</a></h2>"
 
-        # Run the pipeline if there is at least one entry
-        recommendations = run_recommendation_pipeline()
+        # Create recommender and get recommendations (Class that makes recommendations)
+        recommender = BookRecommender(
+            authors_path='data/authors.txt',
+            titles_path='data/titles.txt',
+            force_run=True 
+        )
+        
+        recommendations = recommender.get_recommendations()
         return render_template("recommend.html", recommendations=recommendations.to_dict(orient='records'))
 
     except Exception as e:
