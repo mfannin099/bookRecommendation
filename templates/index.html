@@ -9,11 +9,28 @@
         <h2>Welcome to My Book Recommendation System</h2>
     </div>
 
+    
+    <!-- File Upload Section -->
+    <div style="max-width: 600px; margin: 20px auto;">
+        <form method="POST" action="/upload" enctype="multipart/form-data">
+            <fieldset>
+                <legend><strong>Upload Files:</strong></legend>
+                <label for="titles_file">Titles File (.txt):</label><br>
+                <input type="file" id="titles_file" name="titles_file" accept=".txt" required><br><br>
+
+                <label for="authors_file">Authors File (.txt):</label><br>
+                <input type="file" id="authors_file" name="authors_file" accept=".txt" required><br><br>
+
+                <input type="submit" value="📁 Upload Files">
+            </fieldset>
+        </form>
+    </div>
+
     <!-- Form Section -->
     <div style="max-width: 600px; margin: 0 auto;">
         <form method="POST">
             <fieldset>
-                <legend><strong>Enter Book and Author Details:</strong></legend>
+                <legend><strong> Or Enter Book and Author Details:</strong></legend>
                 <label for="book">Book Title:</label><br>
                 <input type="text" id="book" name="book" required><br><br>
 

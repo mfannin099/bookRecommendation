@@ -10,6 +10,7 @@ author_list = []
 DATA_FOLDER = 'data'
 AUTHORS_FILE = os.path.join(DATA_FOLDER, 'authors.txt')
 BOOKS_FILE = os.path.join(DATA_FOLDER, 'titles.txt')
+ALLOWED_EXTENSIONS = {'txt'}
 
 # Clear files on startup
 def clear_data_files():
@@ -21,6 +22,9 @@ def clear_data_files():
 # Clear files on shutdown
 def cleanup():
     clear_data_files()
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # Register cleanup function
 atexit.register(cleanup)
@@ -77,6 +81,44 @@ def homepage():
         
     return render_template('index.html', book=book, author=author, book_list=book_list, author_list=author_list)
 
+@app.route('/upload', methods=['POST'])
+def upload_files():
+    try:
+        # Check if files are present
+        if 'titles_file' not in request.files or 'authors_file' not in request.files:
+            return "<h2> Please select both files. <a href='/'>Go back</a></h2>"
+        
+        titles_file = request.files['titles_file']
+        authors_file = request.files['authors_file']
+        
+        # Check if files are selected
+        if titles_file.filename == '' or authors_file.filename == '':
+            return "<h2> Please select both files. <a href='/'>Go back</a></h2>"
+        
+        # Read titles file
+        if titles_file and allowed_file(titles_file.filename):
+            titles_content = titles_file.read().decode('utf-8')
+            titles = [line.strip() for line in titles_content.split('\n') if line.strip()]
+        
+        # Read authors file
+        if authors_file and allowed_file(authors_file.filename):
+            authors_content = authors_file.read().decode('utf-8')
+            authors = [line.strip() for line in authors_content.split('\n') if line.strip()]
+        
+        # Check if both files have same number of entries
+        if len(titles) != len(authors):
+            return "<h2> Files must have the same number of entries. <a href='/'>Go back</a></h2>"
+        
+        # Add to existing lists
+        book_list.extend(titles)
+        author_list.extend(authors)
+        save_to_files(book_list, author_list)
+        
+        return redirect('/')
+    
+    except Exception as e:
+        return f"<h2> Error uploading files: {e}. <a href='/'>Go back</a></h2>"
+
 @app.route('/delete', methods=['POST'])
 def delete_entry():
     index = int(request.form.get('index'))  # Get the index of the entry to delete
@@ -131,4 +173,4 @@ def recommend():
         return render_template("error.html", message=error_message)
 
 if __name__ == '__main__':
-    app.run()
+    app.run(debug=True)
