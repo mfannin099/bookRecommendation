@@ -169,8 +169,16 @@ def recommend():
         return render_template("recommend.html", recommendations=recommendations.to_dict(orient='records'))
 
     except Exception as e:
-        error_message = f"❌ Error: {e}. Please enter more books."
+        error_message = f"Error: {e}. Please enter more books."
         return render_template("error.html", message=error_message)
+
+@app.route('/clear', methods=['POST'])
+def clear_all():
+    book_list.clear()
+    author_list.clear()
+    clear_data_files()
+    save_to_files(book_list, author_list)
+    return redirect('/')
 
 if __name__ == '__main__':
     app.run(debug=True)

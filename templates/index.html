@@ -1,12 +1,13 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Book Input</title>
+    <title>Book Recommender</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
 
     <div style="text-align: center;">
-        <h2>Welcome to My Book Recommendation System</h2>
+        <h2>My Book Recommendation System</h2>
     </div>
 
     
@@ -78,6 +79,11 @@
 
     <form action="/recommend" method="GET" style="text-align: center; margin-top: 20px;">
         <input type="submit" value="✨ Get Recommendations">
+    </form>
+
+    <form action="/clear" method="POST" style="text-align: center; margin-top: 20px;">
+        <input type="submit" value="🗑️ Clear All Books" 
+            onclick="return confirm('Delete all books and authors?')">
     </form>
 
 </body>
