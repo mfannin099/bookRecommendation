@@ -1,12 +1,9 @@
+flask
+gunicorn
 requests
 pandas
 numpy
+scikit-learn
 thefuzz
 pyarrow
-ipykernel
-scikit-learn
-rake-nltk
-keybert
-summa
-flask
-gunicorn
+python-dotenv
