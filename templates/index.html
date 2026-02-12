@@ -86,5 +86,28 @@
             onclick="return confirm('Delete all books and authors?')">
     </form>
 
+
+    <!-- Loading Overlay (keep before closing </body>) -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <h3>🔍 Analyzing Your Books...</h3>
+            <p style="color: #6b7280; margin-top: 8px;">
+                Fetching personalized recommendations from our library
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // Show loading screen when getting recommendations
+        const recommendForm = document.querySelector('form[action="/recommend"]');
+        
+        if (recommendForm) {
+            recommendForm.addEventListener('submit', function(e) {
+                document.getElementById('loadingOverlay').classList.add('active');
+            });
+        }
+    </script>
+
 </body>
 </html>

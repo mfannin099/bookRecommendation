@@ -204,3 +204,72 @@ li:hover {
     font-style: italic;
     font-size: 0.95em;
 }
+
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.98);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.loading-overlay.active {
+    display: flex;
+}
+
+.loading-content {
+    text-align: center;
+    max-width: 600px;
+    padding: 40px;
+}
+
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid #e5e7eb;
+    border-top: 4px solid #1f2937;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 24px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.loading-books {
+    margin-top: 24px;
+    text-align: left;
+    background: #fafbfc;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.loading-books h4 {
+    margin-bottom: 12px;
+    color: #374151;
+    font-size: 0.95em;
+}
+
+.loading-books ul {
+    list-style: none;
+    padding: 0;
+}
+
+.loading-books li {
+    padding: 8px 0;
+    color: #6b7280;
+    border: none;
+    background: none;
+    display: block;
+    font-size: 0.9em;
+}

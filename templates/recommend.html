@@ -1,37 +1,31 @@
-<!DOCTYPE html>
 <html>
 <head>
-    <title>Book Recommendations</title>
-    <style>
-        body { font-family: Arial, sans-serif; }
-        .container { max-width: 800px; margin: 0 auto; }
-        .rec-card {
-            border: 1px solid #ccc;
-            padding: 16px;
-            margin-bottom: 12px;
-            border-radius: 8px;
-        }
-        .rec-card h3 { margin: 0; }
-    </style>
+    <title>Recommendations</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-
     <div class="container">
-        <h2>📚 Your Recommendations</h2>
-        <a href="/">← Back to Home</a>
-        <hr>
-
-        {% if recommendations %}
+        <h2>Your Book Recommendations</h2>
+        
+        <ul>
             {% for book in recommendations %}
-                <div class="rec-card">
-                    <h3>{{ book.title }}{% if book.subtitle %}: {{ book.subtitle }}{% endif %}</h3>
-                    <p><strong>Author(s):</strong> {{ book.authors }}</p>
+            <li>
+                <div class="book-info">
+                    <strong>{{ book.title }}</strong>
+                    {% if book.subtitle %}
+                        <br><small>{{ book.subtitle }}</small>
+                    {% endif %}
+                    <br>by {{ book.authors }}
                 </div>
+            </li>
             {% endfor %}
-        {% else %}
-            <p>No recommendations found.</p>
-        {% endif %}
+        </ul>
+        
+        <div style="text-align: center; margin-top: 30px;">
+            <a href="/" style="text-decoration: none;">
+                <button>← Back to Home</button>
+            </a>
+        </div>
     </div>
-
 </body>
 </html>
