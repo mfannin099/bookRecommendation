@@ -28,6 +28,11 @@ Add a new dependency:
 uv add <package>
 ```
 
+Clean the raw personal book-tracker CSV (`data/Book Tracker - Sheet1.csv`) into `data/books_clean.csv` / `data/books_clean.parquet`:
+```bash
+uv run python scripts/clean_books_data.py
+```
+
 There is no test suite, linter, or build step configured in this repo.
 
 ## Architecture
@@ -47,3 +52,5 @@ Two-part app: a stateless-ish Flask frontend (`main.py`) and a recommendation en
 Every call to `/recommend` rebuilds the library from the API rather than trusting the parquet cache (`force_run=True`), so the cache in `main.py`'s flow is effectively unused — it only matters when running `BookRecommender` directly (e.g. from `quick_start.py`) with `force_run=False`.
 
 Templates (`templates/*.html`) are plain Jinja2 with no shared base template; `static/style.css` is the only styling. `notebooks/nltk_playground.ipynb` is a scratch notebook for NLP experimentation and isn't part of the app's runtime path.
+
+**Data cleaning (`scripts/clean_books_data.py`):** Standalone script (unrelated to the Flask app's `/recommend` pipeline) that cleans a personal reading log at `data/Book Tracker - Sheet1.csv`. Notable quirk it handles: the raw sheet often has two rows per book — a bare "want to read" row (title/author only) and a fully filled-in row added after finishing it — so dedup keeps whichever row (by title+author, case-insensitive) has the most non-null fields, not just the first match. Dates are messy and mixed-format (`13-Feb`, `20-Apr-25`, `6/16/25`, `early jan`); `parse_date` resolves day-month-without-year using the row's `year` column and approximates fuzzy month references ("early/mid/late/end <month>") to day 5/15/25, leaving anything else (e.g. "after Christmas") as `NaT` with the original text preserved in `start_date_raw`/`end_date_raw`.
