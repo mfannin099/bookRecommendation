@@ -1,9 +1,0 @@
-flask
-gunicorn
-requests
-pandas
-numpy
-scikit-learn
-thefuzz
-pyarrow
-python-dotenv

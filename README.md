@@ -20,8 +20,6 @@ notebooks/nltk_playground.ipynb: An exploratory sandbox where NLTK and NLP strat
 
 library.parquet: Local data storage for optimized performance during processing.
 
-Dockerfile: Containerization settings for easy deployment.
-
 🧪 Tech Stack & Learnings
 This project served as a practical application of several data science and web development concepts:
 
@@ -33,6 +31,6 @@ Recommendation Systems: Content-based filtering using Jaccard Similarity.
 
 Data Handling: Pandas and Parquet for efficient data storage.
 
-DevOps: Docker for environment consistency.
+Dependency Management: uv.
 
 

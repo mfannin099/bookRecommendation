@@ -4,27 +4,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
+This project uses [uv](https://docs.astral.sh/uv/) for dependency management (no virtualenv/pip workflow, no Docker). Dependencies are declared in `pyproject.toml` and pinned in `uv.lock`.
+
 Setup:
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
 
 Requires a `.env` file with `GOOGLE_BOOKS_API_KEY=<key>` (loaded via `python-dotenv` in `utils.py`).
 
 Run the Flask app (dev):
 ```bash
-python main.py        # serves on 0.0.0.0:5000
+uv run python main.py        # serves on 0.0.0.0:5000
 ```
 
 Run the recommender standalone, outside the web UI (creates sample `data/titles.txt` and `data/authors.txt` if missing):
 ```bash
-python quick_start.py
+uv run python quick_start.py
 ```
 
-Run in Docker (production, via Gunicorn):
+Add a new dependency:
 ```bash
-docker build -t bookrecommendation .
-docker run -p 5000:5000 --env-file .env bookrecommendation
+uv add <package>
 ```
 
 There is no test suite, linter, or build step configured in this repo.
