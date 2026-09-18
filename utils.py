@@ -1,4 +1,6 @@
-import os 
+import os
+from urllib.parse import quote
+
 import requests
 import pandas as pd
 import numpy as np
@@ -51,7 +53,10 @@ class BookRecommender:
     def fetch_book_from_google(self, title, author):
         """Fetch book data from Google Books API."""
         time.sleep(1)
-        url = f"https://www.googleapis.com/books/v1/volumes?q={title}+inauthor:{author}&key={API_KEY}&maxResults=1"
+        url = (
+            f"https://www.googleapis.com/books/v1/volumes"
+            f"?q={quote(title)}+inauthor:{quote(author)}&key={API_KEY}&maxResults=1"
+        )
         
         try:
             response = requests.get(url)
@@ -155,7 +160,10 @@ class BookRecommender:
     
     def fetch_recommendations(self, search_query):
         """Fetch book recommendations from Google Books API."""
-        url = f"https://www.googleapis.com/books/v1/volumes?q={search_query}&key={API_KEY}&maxResults={self.books_to_return}"
+        url = (
+            f"https://www.googleapis.com/books/v1/volumes"
+            f"?q={quote(search_query)}&key={API_KEY}&maxResults={self.books_to_return}"
+        )
         
         try:
             response = requests.get(url)
