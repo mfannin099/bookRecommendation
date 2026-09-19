@@ -1,74 +1,86 @@
 # Book Recommendation
 
-A Flask app that recommends books based on a list of titles/authors you've read, using the Google Books API and a TF-IDF + Jaccard similarity pipeline.
+A Flask app that recommends new books based on the books you've already read. You
+give it a list of titles/authors (typed in one at a time, or uploaded as a file),
+and it looks up each one on Open Library (falling back to Google Books when Open
+Library doesn't have a description), builds a taste profile from those
+descriptions, searches Open Library for similar books you haven't read yet, and
+ranks the results by how similar they are to your profile.
 
-🚀 Getting Started
+## Setup
+
 This project uses [uv](https://docs.astral.sh/uv/) for dependency management.
 
-Setup:
 ```bash
 uv sync
 ```
 
-Create a `.env` file with your Google Books API key:
+Open Library alone only found descriptions for about **36% of a 236-book test
+library** (mostly business/self-help nonfiction, a category Open Library covers
+poorly). The Google Books fallback is what makes the rest of your library usable,
+so create a `.env` file with a Google Books API key:
+
 ```
 GOOGLE_BOOKS_API_KEY=<your key>
 ```
 
-Run the Flask app:
+The app still runs without one — it'll just have far fewer books to build a profile
+from.
+
+## Running it
+
 ```bash
-uv run python main.py
+uv run python main.py        # serves on 0.0.0.0:5000
 ```
 
-Run the recommender standalone (no web UI):
+Then open `http://localhost:5000`. (If port 5000 is already taken — on macOS this
+is usually the AirPlay Receiver — run with a different port instead:
+`uv run python -c "from main import app; app.run(host='0.0.0.0', port=5001)"`.)
+
+To run the recommender from the command line instead of the web UI (uses a couple
+of sample books):
+
 ```bash
 uv run python quick_start.py
 ```
 
-Clean the personal reading-log CSV in `data/`:
-```bash
-uv run python scripts/clean_books_data.py
-```
+## Building your book list
 
-🛠️ How It Works
-The recommendation engine follows a specific data pipeline to ensure relevance:
+Two ways to add books, and you can mix both:
 
-User Input: Accepts book titles or authors through a Flask frontend.
+- **One at a time** — the form on the homepage.
+- **Upload files** — accepts multiple files per upload, any mix of:
+  - `.csv` / `.xlsx` with `title` and `author` columns (case-insensitive) — the
+    same shape as `data/books_clean.csv`, so you can upload that file directly.
+  - `.txt` with one `Title - Author` per line.
 
-Data Acquisition: Queries the Google Books API to retrieve metadata (descriptions, categories, etc.).
+Hit "Get Recommendations" once your list is built. The app looks up each book,
+builds a search query from the most distinctive terms across their descriptions,
+and searches Open Library for similar titles you haven't already read.
 
-Data Cleaning: Processes text data to prepare it for similarity analysis.
+## Key files
 
-Similarity Engine: Uses Jaccard Similarity (implemented in utils.py) to compare book attributes and find the closest matches.
+- `main.py` — the Flask app: routes for adding/uploading/editing/deleting books
+  and triggering recommendations.
+- `utils.py` — the `BookRecommender` class: the recommendation pipeline (metadata
+  lookup → TF-IDF profile → Open Library candidate search → cosine-similarity
+  ranking).
+- `metadata.py` — the Open Library / Google Books lookup client shared by
+  everything above.
+- `scripts/clean_books_data.py` — a standalone script (unrelated to the Flask app)
+  that cleans a personal reading-log export (`data/Book Tracker - Sheet1.csv`) into
+  `data/books_clean.csv`.
+- `quick_start.py` — runs the recommender from the command line, no Flask UI.
 
-Output: Returns a curated list of recommendations back to the user interface.
+## Why Open Library, and why a fallback
 
-📁 Key Files
-main.py: The core Flask application handling routes and user interaction.
+Open Library has no API key and no rate limit, which made it worth switching to as
+the primary source. But its `description` field is inconsistently populated,
+especially outside fiction — the 36% figure above was measured directly against a
+real 236-book reading history before deciding to keep the Google Books fallback
+rather than relying on Open Library alone.
 
-utils.py: The "brains" of the operation. Contains the `BookRecommender` class with logic for API calls, data cleaning, and the recommendation workflow.
+## Tech stack
 
-quick_start.py: Runs the recommendation pipeline directly from the command line, without the Flask UI.
-
-scripts/clean_books_data.py: Cleans the personal reading-log CSV (`data/Book Tracker - Sheet1.csv`) into standardized `data/books_clean.csv` / `.parquet` files.
-
-data/: Raw and cleaned reading-log CSVs (separate from `library.parquet`, which is the recommender's API-response cache).
-
-notebooks/nltk_playground.ipynb: An exploratory sandbox where NLTK and NLP strategies are tested.
-
-library.parquet: Local data storage for optimized performance during processing.
-
-pyproject.toml / uv.lock: uv-managed project dependencies.
-
-🧪 Tech Stack & Learnings
-This project served as a practical application of several data science and web development concepts:
-
-Web Framework: Flask
-
-Natural Language Processing: scikit-learn TF-IDF is used in the live recommendation pipeline to generate search queries; NLTK was explored separately in `notebooks/nltk_playground.ipynb` but isn't part of the live pipeline.
-
-Recommendation Systems: Content-based filtering using Jaccard Similarity.
-
-Data Handling: Pandas and Parquet for efficient data storage.
-
-Dependency Management: uv.
+Flask, pandas, scikit-learn (TF-IDF + cosine similarity for ranking), thefuzz
+(fuzzy title matching to exclude already-read books), requests, uv.

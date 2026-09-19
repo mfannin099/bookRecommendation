@@ -54,7 +54,7 @@ if __name__ == "__main__":
     
     # Get recommendations
     print("Getting book recommendations...")
-    print("(This may take a moment while fetching from Google Books API)")
+    print("(This may take a moment while fetching from Open Library)")
     print()
     
     recommendations = recommender.get_recommendations()

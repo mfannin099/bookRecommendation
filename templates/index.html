@@ -16,12 +16,13 @@
         <form method="POST" action="/upload" enctype="multipart/form-data">
             <fieldset>
                 <legend><strong>Upload Files:</strong></legend>
-                <label for="titles_file">Titles File (.txt):</label><br>
-                <input type="file" id="titles_file" name="titles_file" accept=".txt" required><br><br>
-
-                <label for="authors_file">Authors File (.txt):</label><br>
-                <input type="file" id="authors_file" name="authors_file" accept=".txt" required><br><br>
-
+                <label for="files">Book list file(s) (.csv, .xlsx, or .txt):</label><br>
+                <input type="file" id="files" name="files" accept=".csv,.xlsx,.xls,.txt" multiple required><br>
+                <p style="font-size: 0.85em; color: #6b7280;">
+                    .csv/.xlsx need <code>title</code> and <code>author</code> columns.
+                    .txt needs one <code>Title - Author</code> per line.
+                    You can select more than one file at once.
+                </p>
                 <input type="submit" value="📁 Upload Files">
             </fieldset>
         </form>

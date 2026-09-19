@@ -2,3 +2,6 @@
 __pycache__/
 .vscode/
 .env
+library.parquet
+data/titles.txt
+data/authors.txt

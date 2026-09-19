@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect
 import os
+import pandas as pd
 from utils import BookRecommender
 import atexit
 
@@ -10,7 +11,7 @@ author_list = []
 DATA_FOLDER = 'data'
 AUTHORS_FILE = os.path.join(DATA_FOLDER, 'authors.txt')
 BOOKS_FILE = os.path.join(DATA_FOLDER, 'titles.txt')
-ALLOWED_EXTENSIONS = {'txt'}
+ALLOWED_EXTENSIONS = {'txt', 'csv', 'xlsx', 'xls'}
 
 # Clear files on startup
 def clear_data_files():
@@ -81,41 +82,79 @@ def homepage():
         
     return render_template('index.html', book=book, author=author, book_list=book_list, author_list=author_list)
 
+def _find_column(columns, name):
+    for col in columns:
+        if col.strip().lower() == name:
+            return col
+    return None
+
+
+def parse_book_file(file_storage):
+    """Parse one uploaded file into a list of (title, author) pairs.
+
+    .csv/.xlsx/.xls need 'title' and 'author' columns (case-insensitive).
+    .txt needs one 'Title - Author' per line.
+    """
+    filename = file_storage.filename
+    ext = filename.rsplit('.', 1)[1].lower()
+
+    if ext == 'txt':
+        content = file_storage.read().decode('utf-8')
+        pairs = []
+        for line in content.split('\n'):
+            line = line.strip()
+            if not line:
+                continue
+            if ' - ' not in line:
+                raise ValueError(f"'{line}' in {filename} is not in 'Title - Author' format")
+            title, author = line.split(' - ', 1)
+            pairs.append((title.strip(), author.strip()))
+        return pairs
+
+    if ext == 'csv':
+        df = pd.read_csv(file_storage)
+    elif ext in ('xlsx', 'xls'):
+        df = pd.read_excel(file_storage)
+    else:
+        raise ValueError(f"Unsupported file type: {filename}")
+
+    title_col = _find_column(df.columns, 'title')
+    author_col = _find_column(df.columns, 'author')
+    if title_col is None or author_col is None:
+        raise ValueError(f"{filename} must have 'title' and 'author' columns")
+
+    df = df.dropna(subset=[title_col])
+    return [
+        (str(row[title_col]).strip(), str(row[author_col]).strip() if pd.notna(row[author_col]) else '')
+        for _, row in df.iterrows()
+    ]
+
+
 @app.route('/upload', methods=['POST'])
 def upload_files():
     try:
-        # Check if files are present
-        if 'titles_file' not in request.files or 'authors_file' not in request.files:
-            return "<h2> Please select both files. <a href='/'>Go back</a></h2>"
-        
-        titles_file = request.files['titles_file']
-        authors_file = request.files['authors_file']
-        
-        # Check if files are selected
-        if titles_file.filename == '' or authors_file.filename == '':
-            return "<h2> Please select both files. <a href='/'>Go back</a></h2>"
-        
-        # Read titles file
-        if titles_file and allowed_file(titles_file.filename):
-            titles_content = titles_file.read().decode('utf-8')
-            titles = [line.strip() for line in titles_content.split('\n') if line.strip()]
-        
-        # Read authors file
-        if authors_file and allowed_file(authors_file.filename):
-            authors_content = authors_file.read().decode('utf-8')
-            authors = [line.strip() for line in authors_content.split('\n') if line.strip()]
-        
-        # Check if both files have same number of entries
-        if len(titles) != len(authors):
-            return "<h2> Files must have the same number of entries. <a href='/'>Go back</a></h2>"
-        
+        files = [f for f in request.files.getlist('files') if f.filename]
+        if not files:
+            return "<h2> Please select at least one file. <a href='/'>Go back</a></h2>"
+
+        for f in files:
+            if not allowed_file(f.filename):
+                return f"<h2> Unsupported file type: {f.filename}. <a href='/'>Go back</a></h2>"
+
+        titles = []
+        authors = []
+        for f in files:
+            for title, author in parse_book_file(f):
+                titles.append(title)
+                authors.append(author)
+
         # Add to existing lists
         book_list.extend(titles)
         author_list.extend(authors)
         save_to_files(book_list, author_list)
-        
+
         return redirect('/')
-    
+
     except Exception as e:
         return f"<h2> Error uploading files: {e}. <a href='/'>Go back</a></h2>"
 
