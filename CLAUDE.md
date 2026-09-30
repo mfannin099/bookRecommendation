@@ -11,7 +11,7 @@ Setup:
 uv sync
 ```
 
-Requires a `.env` file with `GOOGLE_BOOKS_API_KEY=<key>` (loaded via `python-dotenv` in `metadata.py`). The app runs without it, but Open Library alone only found descriptions for ~36% of a 236-book test library (measured directly, see README), so most real usage depends on the Google Books fallback firing.
+No API key or `.env` file needed — both metadata sources (Open Library, Wikipedia) are free and keyless. Open Library alone only found descriptions for ~36% of a 236-book test library (measured before the Wikipedia fallback existed; see `scripts/test_metadata_coverage.py` to re-measure).
 
 Run the Flask app (dev):
 ```bash
@@ -33,7 +33,12 @@ Clean the raw personal book-tracker CSV (`data/Book Tracker - Sheet1.csv`) into 
 uv run python scripts/clean_books_data.py
 ```
 
-There is no test suite, linter, or build step configured in this repo.
+Measure `MetadataClient` description coverage (Open Library vs. Wikipedia fallback vs. not found) against the accurately-tracked tail of `data/books_clean.csv` (everything from "Why Machines learn" onward — earlier rows were reconstructed from memory and aren't reliable test data):
+```bash
+uv run python scripts/test_metadata_coverage.py
+```
+
+There is no other test suite, linter, or build step configured in this repo.
 
 ## Architecture
 
@@ -41,7 +46,7 @@ Three-part app: a stateless-ish Flask frontend (`main.py`), a metadata lookup cl
 
 **State handling (`main.py`):** The book/author list the user builds up isn't stored in a database — it's held in the module-level `book_list`/`author_list` globals and persisted to flat files (`data/titles.txt`, `data/authors.txt`), one entry per line. Files are wiped on both startup and process exit (`clear_data_files`, registered via `atexit`), so this app is designed for a single ephemeral session, not multi-user persistence. Routes: `/` (add/list entries), `/upload` (bulk-add from one or more uploaded `.csv`/`.xlsx`/`.txt` files — parsed by `parse_book_file`), `/edit`, `/delete`, `/clear`, and `/recommend` (triggers the recommendation pipeline and renders `recommend.html`).
 
-**Metadata lookup (`metadata.py`):** `MetadataClient.fetch(title, author)` tries Open Library first (`fetch_from_open_library` — search by title/author, then fetch the work's `description`/`subjects`), and falls back to Google Books (`fetch_from_google_books`, uses `GOOGLE_BOOKS_API_KEY`) whenever Open Library has no work or no description. Also exposes `search_open_library_candidates(query)` for discovering new, not-yet-read books. Open Library was measured at ~36% description coverage alone on a 236-book test library — the Google Books fallback is load-bearing, not optional polish.
+**Metadata lookup (`metadata.py`):** `MetadataClient.fetch(title, author)` tries Open Library first (`fetch_from_open_library` — search by title/author, then fetch the work's `description`/`subjects`), and falls back to Wikipedia (`fetch_from_wikipedia`) whenever Open Library has no work or no description. The Wikipedia fallback searches `en.wikipedia.org`'s search API for `"{title} {author} book"`, takes the top hit, and uses that page's lead-section extract (via the REST summary endpoint) as the description — no API key needed. Also exposes `search_open_library_candidates(query)` for discovering new, not-yet-read books. Open Library was measured at ~36% description coverage alone on a 236-book test library (pre-Wikipedia-fallback) — see `scripts/test_metadata_coverage.py` for re-measuring coverage against the current two-source pipeline.
 
 **Recommendation pipeline (`utils.py`, `BookRecommender` class):** `get_recommendations()` runs these steps in order:
 1. `read_data` — load the user's titles/authors from the data files.

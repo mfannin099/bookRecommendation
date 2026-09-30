@@ -1,23 +1,23 @@
-"""Book metadata lookup: Open Library first, falling back to Google Books.
+"""Book metadata lookup: Open Library first, falling back to Wikipedia.
 
 Open Library is free/keyless and often has richer subject tags, but frequently
 lacks a usable `description` for a given work -- especially for business /
-nonfiction titles. When that happens we fall back to Google Books so downstream
-TF-IDF steps always have something to work with.
+nonfiction titles. When that happens we fall back to Wikipedia (also free and
+keyless) so downstream TF-IDF steps always have something to work with.
 """
-import os
 import time
 from urllib.parse import quote
 
 import requests
-from dotenv import load_dotenv
-
-load_dotenv()
-GOOGLE_BOOKS_API_KEY = os.getenv("GOOGLE_BOOKS_API_KEY")
 
 OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json"
 OPEN_LIBRARY_WORK_URL = "https://openlibrary.org{key}.json"
-GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes"
+WIKIPEDIA_SEARCH_URL = "https://en.wikipedia.org/w/api.php"
+WIKIPEDIA_SUMMARY_URL = "https://en.wikipedia.org/api/rest_v1/page/summary/{title}"
+
+# Wikipedia rejects requests with no descriptive User-Agent (403), per its API
+# etiquette policy: https://meta.wikimedia.org/wiki/User-Agent_policy
+WIKIPEDIA_HEADERS = {"User-Agent": "bookRecommendation/1.0 (local personal project)"}
 
 
 def _extract_description(raw):
@@ -68,39 +68,71 @@ def fetch_from_open_library(title, author):
         return None
 
 
-def fetch_from_google_books(title, author):
-    """Fallback lookup via the Google Books API. Returns a metadata dict or
-    None if nothing was found or the result has no usable description."""
+def _wikipedia_get(url, params=None, max_retries=3):
+    """GET with backoff on Wikipedia's 429 (rate limit), which shows up in
+    normal use once a run makes more than a couple hundred requests."""
+    resp = None
+    for attempt in range(max_retries):
+        resp = requests.get(url, params=params, headers=WIKIPEDIA_HEADERS, timeout=10)
+        if resp.status_code != 429:
+            return resp
+        time.sleep(int(resp.headers.get("Retry-After", 2**attempt)))
+    return resp
+
+
+def fetch_from_wikipedia(title, author):
+    """Fallback lookup via Wikipedia. Searches for the book's page, then reads
+    its lead-section extract as the description. Returns a metadata dict or
+    None if no matching page is found or the page has no usable extract.
+
+    Wikipedia's free-text search frequently returns an unrelated page for
+    lesser-known book titles (TV episodes, films, politicians sharing a word
+    or two) rather than no result at all, so a match is only trusted when the
+    author's name actually appears in the returned page's extract."""
+    if not author:
+        return None
+
     try:
-        url = (
-            f"{GOOGLE_BOOKS_URL}?q={quote(title)}+inauthor:{quote(author)}"
-            f"&key={GOOGLE_BOOKS_API_KEY}&maxResults=1"
+        search_resp = _wikipedia_get(
+            WIKIPEDIA_SEARCH_URL,
+            params={
+                "action": "query",
+                "list": "search",
+                "srsearch": f"{title} {author} book",
+                "format": "json",
+                "srlimit": 1,
+            },
         )
-        resp = requests.get(url, timeout=10)
-        if resp.status_code != 200:
+        search_resp.raise_for_status()
+        results = search_resp.json().get("query", {}).get("search", [])
+        if not results:
             return None
 
-        items = resp.json().get("items", [])
-        if not items:
+        page_title = results[0]["title"]
+        summary_resp = _wikipedia_get(WIKIPEDIA_SUMMARY_URL.format(title=quote(page_title)))
+        if summary_resp.status_code != 200:
             return None
 
-        info = items[0]["volumeInfo"]
-        description = info.get("description")
+        summary = summary_resp.json()
+        description = summary.get("extract")
         if not description:
             return None
 
+        if author.strip().lower() not in description.lower():
+            return None
+
         return {
-            "title": info.get("title", title),
-            "subtitle": info.get("subtitle"),
-            "authors": info.get("authors"),
-            "publishedDate": info.get("publishedDate"),
-            "pageCount": info.get("pageCount"),
-            "categories": info.get("categories"),
+            "title": summary.get("title", title),
+            "subtitle": None,
+            "authors": [author] if author else None,
+            "publishedDate": None,
+            "pageCount": None,
+            "categories": None,
             "description": description,
-            "source": "google_books",
+            "source": "wikipedia",
         }
     except Exception as e:
-        print(f"Google Books lookup failed for '{title}' by '{author}': {e}")
+        print(f"Wikipedia lookup failed for '{title}' by '{author}': {e}")
         return None
 
 
@@ -125,7 +157,7 @@ def search_open_library_candidates(query, limit=40):
 
 class MetadataClient:
     """Fetches book metadata, preferring Open Library and falling back to
-    Google Books when Open Library has no usable description."""
+    Wikipedia when Open Library has no usable description."""
 
     def __init__(self, rate_limit_seconds=1):
         self.rate_limit_seconds = rate_limit_seconds
@@ -137,4 +169,4 @@ class MetadataClient:
         if result is not None:
             return result
 
-        return fetch_from_google_books(title, author)
+        return fetch_from_wikipedia(title, author)

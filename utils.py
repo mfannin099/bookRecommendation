@@ -1,7 +1,7 @@
 """Book recommendation pipeline.
 
 Builds a taste profile from the user's read books (via metadata.py's Open
-Library / Google Books lookups), searches Open Library for candidate books,
+Library / Wikipedia lookups), searches Open Library for candidate books,
 excludes anything already read, and ranks candidates by TF-IDF cosine
 similarity against the read-books profile.
 """
@@ -57,7 +57,7 @@ class BookRecommender:
         return self.authors_list, self.titles_list
 
     def build_library(self):
-        """Fetch metadata for every read book via Open Library / Google Books."""
+        """Fetch metadata for every read book via Open Library / Wikipedia."""
         rows = []
         for title, author in zip(self.titles_list, self.authors_list):
             print(f"Fetching: {title}")
