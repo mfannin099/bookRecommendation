@@ -23,12 +23,13 @@ def strip_punctuation(text):
 
 class BookRecommender:
 
-    def __init__(self, authors_path, titles_path, cache_path="library.parquet",
+    def __init__(self, books, cache_path="library.parquet",
                  force_run=False, terms_in_search_query=3, candidate_pool_size=40,
                  already_read_match_score=85, top_n=10):
+        """books: list of (title, author) tuples for the books already read."""
 
-        self.authors_path = authors_path
-        self.titles_path = titles_path
+        self.titles_list = [title for title, _author in books]
+        self.authors_list = [author for _title, author in books]
         self.cache_path = cache_path
         self.force_run = force_run
         self.terms_in_search_query = terms_in_search_query
@@ -38,23 +39,6 @@ class BookRecommender:
 
         self.client = MetadataClient()
         self.library_df = None
-        self.titles_list = None
-        self.authors_list = None
-
-    def read_data(self):
-        """Read authors and titles from input files."""
-        if not os.path.isfile(self.authors_path):
-            raise FileNotFoundError(f"File not found: {self.authors_path}")
-        if not os.path.isfile(self.titles_path):
-            raise FileNotFoundError(f"File not found: {self.titles_path}")
-
-        with open(self.authors_path, 'r', encoding='utf-8') as file:
-            self.authors_list = [line.strip() for line in file if line.strip()]
-
-        with open(self.titles_path, 'r', encoding='utf-8') as file:
-            self.titles_list = [line.strip() for line in file if line.strip()]
-
-        return self.authors_list, self.titles_list
 
     def build_library(self):
         """Fetch metadata for every read book via Open Library / Wikipedia."""
@@ -76,8 +60,6 @@ class BookRecommender:
 
     def load_or_build_library(self):
         """Load library from cache or build it if needed."""
-        self.read_data()
-
         if os.path.exists(self.cache_path) and not self.force_run:
             self.library_df = pd.read_parquet(self.cache_path)
         else:

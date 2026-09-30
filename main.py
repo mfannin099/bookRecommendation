@@ -1,69 +1,17 @@
 from flask import Flask, render_template, request, redirect
-import os
 import pandas as pd
 from utils import BookRecommender
-import atexit
 
 app = Flask(__name__)
 
 book_list = []
 author_list = []
-DATA_FOLDER = 'data'
-AUTHORS_FILE = os.path.join(DATA_FOLDER, 'authors.txt')
-BOOKS_FILE = os.path.join(DATA_FOLDER, 'titles.txt')
 ALLOWED_EXTENSIONS = {'txt', 'csv', 'xlsx', 'xls'}
 
-# Clear files on startup
-def clear_data_files():
-    if os.path.exists(BOOKS_FILE):
-        os.remove(BOOKS_FILE)
-    if os.path.exists(AUTHORS_FILE):
-        os.remove(AUTHORS_FILE)
-
-# Clear files on shutdown
-def cleanup():
-    clear_data_files()
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# Register cleanup function
-atexit.register(cleanup)
-
-# Clear on startup
-clear_data_files()
-
-# Rest of your code stays the same...
-def load_from_files():
-    books = []
-    authors = []
-    
-    if os.path.exists(BOOKS_FILE):
-        with open(BOOKS_FILE, 'r') as f:
-            books = [line.strip() for line in f if line.strip()]
-    
-    if os.path.exists(AUTHORS_FILE):
-        with open(AUTHORS_FILE, 'r') as f:
-            authors = [line.strip() for line in f if line.strip()]
-    
-    return books, authors
-
-book_list, author_list = load_from_files()
-
-# Initialize lists from files
-book_list, author_list = load_from_files()
-
-# Function to save the lists to text files
-def save_to_files(book_list, author_list):
-    os.makedirs(DATA_FOLDER, exist_ok=True)
-    
-    with open(BOOKS_FILE, 'w') as f:
-        for book in book_list:
-            f.write(f"{book}\n")
-    
-    with open(AUTHORS_FILE, 'w') as f:
-        for author in author_list:
-            f.write(f"{author}\n")
 
 @app.route('/', methods=["GET", 'POST'])
 def homepage():
@@ -77,9 +25,8 @@ def homepage():
         if book and author:  # Ensure both book and author are not None or empty
             book_list.append(book)
             author_list.append(author)
-            save_to_files(book_list, author_list)
             return redirect('/')  # Redirect to clear the form after submission
-        
+
     return render_template('index.html', book=book, author=author, book_list=book_list, author_list=author_list)
 
 def _find_column(columns, name):
@@ -141,17 +88,10 @@ def upload_files():
             if not allowed_file(f.filename):
                 return f"<h2> Unsupported file type: {f.filename}. <a href='/'>Go back</a></h2>"
 
-        titles = []
-        authors = []
         for f in files:
             for title, author in parse_book_file(f):
-                titles.append(title)
-                authors.append(author)
-
-        # Add to existing lists
-        book_list.extend(titles)
-        author_list.extend(authors)
-        save_to_files(book_list, author_list)
+                book_list.append(title)
+                author_list.append(author)
 
         return redirect('/')
 
@@ -165,7 +105,6 @@ def delete_entry():
     if 0 <= index < len(book_list):
         del book_list[index]
         del author_list[index]
-        save_to_files(book_list, author_list)
 
     return redirect('/')
 
@@ -174,13 +113,10 @@ def edit_entry():
     index = int(request.values.get('index'))
 
     if request.method == 'POST':
-        updated_book = request.form['book']
-        updated_author = request.form['author']
-        book_list[index] = updated_book
-        author_list[index] = updated_author
-        save_to_files(book_list, author_list)
+        book_list[index] = request.form['book']
+        author_list[index] = request.form['author']
         return redirect('/')
-    
+
     # GET request — load current values
     current_book = book_list[index]
     current_author = author_list[index]
@@ -189,21 +125,12 @@ def edit_entry():
 @app.route('/recommend', methods=["GET"])
 def recommend():
     try:
-        # Check if titles and authors lists have content
-        with open('data/titles.txt', 'r') as f_titles, open('data/authors.txt', 'r') as f_authors:
-            titles = [line.strip() for line in f_titles if line.strip()]
-            authors = [line.strip() for line in f_authors if line.strip()]
-
-        if not titles or not authors:
+        if not book_list or not author_list:
             return "<h2>⚠️ You must enter at least one book and author before getting recommendations. <a href='/'>Go back</a></h2>"
 
         # Create recommender and get recommendations (Class that makes recommendations)
-        recommender = BookRecommender(
-            authors_path='data/authors.txt',
-            titles_path='data/titles.txt',
-            force_run=True 
-        )
-        
+        recommender = BookRecommender(books=list(zip(book_list, author_list)), force_run=True)
+
         recommendations = recommender.get_recommendations()
         return render_template("recommend.html", recommendations=recommendations.to_dict(orient='records'))
 
@@ -215,8 +142,6 @@ def recommend():
 def clear_all():
     book_list.clear()
     author_list.clear()
-    clear_data_files()
-    save_to_files(book_list, author_list)
     return redirect('/')
 
 if __name__ == '__main__':

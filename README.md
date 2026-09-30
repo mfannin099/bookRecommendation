@@ -44,12 +44,10 @@ What you'll see:
    query from the most distinctive terms across them, search Open Library for
    similar titles you haven't already read, and rank the results.
 
-Your list lives only in the running process's memory (plus `data/titles.txt` /
-`data/authors.txt`, which mirror it to disk so `/recommend` can read it back).
-Both are wiped when the app starts and when it exits — **this app has no
-persistence across restarts**, by design. There's nothing to log into and
-nothing to lose by restarting; if you want a list to survive, keep your own
-copy as a `.csv` and re-upload it next time.
+Your list lives only in the running process's memory — nothing is written to
+disk. **This app has no persistence across restarts**, by design. There's
+nothing to log into and nothing to lose by restarting; if you want a list to
+survive, keep your own copy as a `.csv` and re-upload it next time.
 
 Expect `/recommend` to take a while (see "Why it's slow" below) — it's making
 real, rate-limited network calls for every book in your list plus every
@@ -62,7 +60,7 @@ the project root:
 
 | Script | What it's for | Command |
 |---|---|---|
-| `quick_start.py` | Run the recommendation pipeline against a couple of sample books, no Flask/browser needed. Good for checking the pipeline still works end to end. | `uv run python quick_start.py` |
+| `quick_start.py` | Run the recommendation pipeline against a couple of hardcoded books (`BOOKS` list at the top of the file — edit it to try your own), no Flask/browser needed. Good for checking the pipeline still works end to end. | `uv run python quick_start.py` |
 | `scripts/clean_books_data.py` | Turn your raw reading-log export (`data/Book Tracker - Sheet1.csv`) into the cleaned `data/books_clean.csv` / `.parquet` — dedupes rows, standardizes dates/genres. Run this after editing the raw sheet. | `uv run python scripts/clean_books_data.py` |
 | `scripts/test_metadata_coverage.py` | Reports what fraction of your real reading history gets a usable description from Open Library vs. Wikipedia vs. neither. Useful after changing `metadata.py` or the source data, to see whether coverage got better or worse. | `uv run python scripts/test_metadata_coverage.py` |
 
