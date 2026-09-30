@@ -98,7 +98,9 @@ def clean_books(df: pd.DataFrame) -> pd.DataFrame:
     df["author"] = (
         df["author"]
         .str.replace(r"\s*&\s*", ", ", regex=True)
-        .str.replace(r"\s+and\s+", ", ", regex=True)
+        # optional leading ", " swallows an existing Oxford comma (e.g. "X, Y,
+        # and Z") so it doesn't become a double comma after this substitution
+        .str.replace(r"(,\s*)?\s+and\s+", ", ", regex=True)
     )
     df["genre"] = df["genre"].apply(clean_genres)
 
