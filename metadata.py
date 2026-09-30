@@ -159,14 +159,19 @@ class MetadataClient:
     """Fetches book metadata, preferring Open Library and falling back to
     Wikipedia when Open Library has no usable description."""
 
-    def __init__(self, rate_limit_seconds=1):
-        self.rate_limit_seconds = rate_limit_seconds
+    def __init__(self, open_library_pause=0.2, wikipedia_pause=0.5):
+        self.open_library_pause = open_library_pause
+        self.wikipedia_pause = wikipedia_pause
 
     def fetch(self, title, author):
-        time.sleep(self.rate_limit_seconds)
-
+        """Open Library has no documented rate limit, so its pause is just a
+        light courtesy delay. Wikipedia does rate-limit (see _wikipedia_get's
+        429 backoff), so it gets a longer pause to make that less likely to
+        trigger in the first place."""
+        time.sleep(self.open_library_pause)
         result = fetch_from_open_library(title, author)
         if result is not None:
             return result
 
+        time.sleep(self.wikipedia_pause)
         return fetch_from_wikipedia(title, author)

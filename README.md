@@ -22,12 +22,13 @@ sources (Open Library, Wikipedia) are free and keyless.
 ## Running the web app
 
 ```bash
-uv run python main.py        # serves on 0.0.0.0:5000
+uv run python main.py        # serves on 0.0.0.0:5001
 ```
 
-Then open `http://localhost:5000` in a browser. (If port 5000 is already taken —
-on macOS this is usually the AirPlay Receiver — run on a different port instead:
-`uv run python -c "from main import app; app.run(host='0.0.0.0', port=5001)"`.)
+Then open `http://localhost:5001` in a browser. (Port 5001 was picked over the
+Flask default of 5000 because on macOS, 5000 is usually taken by the AirPlay
+Receiver. If 5001 is taken too, run on a different port instead:
+`uv run python -c "from main import app; app.run(host='0.0.0.0', port=5002)"`.)
 
 What you'll see:
 
@@ -88,7 +89,7 @@ print(result["description"])  # None if neither source had a match
 
 `fetch()` always tries Open Library first and only falls back to Wikipedia if
 Open Library has no usable description; it returns `None` if neither source
-finds one. There's a built-in 1-second pause before each call (see "Why it's
+finds one. There's a built-in pause before each network call (see "Why it's
 slow" below), so don't loop this over a large list without expecting it to take
 a while.
 
@@ -96,13 +97,14 @@ a while.
 
 The pipeline makes one live HTTP lookup per book it looks up metadata for —
 every book in your reading list, *and* every candidate book it's considering
-recommending (up to 40 by default). Each lookup has a mandatory 1-second pause
-built in, and a miss on Open Library triggers two more requests to Wikipedia
-(plus up to 3 retries with backoff if Wikipedia rate-limits the request). A
-single `/recommend` call or `quick_start.py` run can add up to 80-150+
-sequential network requests — that's expected, not a bug. It's a straightforward
-tradeoff for using free, keyless APIs instead of a paid one with better rate
-limits.
+recommending (up to 40 by default). Each lookup has a built-in pause (0.2s
+before the Open Library attempt, 0.5s more before falling back to Wikipedia —
+Open Library has no documented rate limit so it only needs a light courtesy
+delay, but Wikipedia does rate-limit and its fallback also means two extra
+requests, plus up to 3 retries with backoff if it 429s). A single `/recommend`
+call or `quick_start.py` run can still add up to 80-150+ sequential network
+requests — that's expected, not a bug. It's a straightforward tradeoff for
+using free, keyless APIs instead of a paid one with better rate limits.
 
 ## Key files
 

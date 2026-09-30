@@ -27,7 +27,7 @@ def load_test_rows():
 
 def main():
     rows = load_test_rows()
-    client = MetadataClient(rate_limit_seconds=1)
+    client = MetadataClient()
     counts = Counter()
 
     for _, row in rows.iterrows():
