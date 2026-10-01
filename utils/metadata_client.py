@@ -15,9 +15,18 @@ OPEN_LIBRARY_WORK_URL = "https://openlibrary.org{key}.json"
 WIKIPEDIA_SEARCH_URL = "https://en.wikipedia.org/w/api.php"
 WIKIPEDIA_SUMMARY_URL = "https://en.wikipedia.org/api/rest_v1/page/summary/{title}"
 
+# Shared across every lookup (and every worker thread in BookRecommender's
+# thread pool) so repeated requests to the same host reuse an already-open
+# connection instead of paying a fresh TCP+TLS handshake each time. Safe to
+# share across threads for simple, independent GETs like these - the
+# underlying urllib3 connection pool is internally lock-protected.
+_SESSION = requests.Session()
+
 # Wikipedia rejects requests with no descriptive User-Agent (403), per its API
-# etiquette policy: https://meta.wikimedia.org/wiki/User-Agent_policy
-WIKIPEDIA_HEADERS = {"User-Agent": "bookRecommendation/1.0 (local personal project)"}
+# etiquette policy: https://meta.wikimedia.org/wiki/User-Agent_policy. Applied
+# session-wide so every request carries it - harmless for Open Library.
+DEFAULT_HEADERS = {"User-Agent": "bookRecommendation/1.0 (local personal project)"}
+_SESSION.headers.update(DEFAULT_HEADERS)
 
 
 def _extract_description(raw):
@@ -30,7 +39,7 @@ def fetch_from_open_library(title, author):
     """Look up a single book on Open Library. Returns a metadata dict or None
     if no work was found or the work has no usable description."""
     try:
-        resp = requests.get(
+        resp = _SESSION.get(
             OPEN_LIBRARY_SEARCH_URL,
             params={"title": title, "author": author, "limit": 1},
             timeout=10,
@@ -45,7 +54,7 @@ def fetch_from_open_library(title, author):
         if not work_key:
             return None
 
-        work_resp = requests.get(OPEN_LIBRARY_WORK_URL.format(key=work_key), timeout=10)
+        work_resp = _SESSION.get(OPEN_LIBRARY_WORK_URL.format(key=work_key), timeout=10)
         work_resp.raise_for_status()
         work = work_resp.json()
 
@@ -73,7 +82,7 @@ def _wikipedia_get(url, params=None, max_retries=3):
     normal use once a run makes more than a couple hundred requests."""
     resp = None
     for attempt in range(max_retries):
-        resp = requests.get(url, params=params, headers=WIKIPEDIA_HEADERS, timeout=10)
+        resp = _SESSION.get(url, params=params, timeout=10)
         if resp.status_code != 429:
             return resp
         time.sleep(int(resp.headers.get("Retry-After", 2**attempt)))
@@ -139,7 +148,7 @@ def fetch_from_wikipedia(title, author):
 def search_open_library_candidates(query, limit=40):
     """Search Open Library for candidate books matching a query string."""
     try:
-        resp = requests.get(
+        resp = _SESSION.get(
             OPEN_LIBRARY_SEARCH_URL, params={"q": query, "limit": limit}, timeout=10
         )
         resp.raise_for_status()

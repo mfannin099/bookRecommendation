@@ -115,10 +115,15 @@ unchanged, but up to `max_workers` of them are in flight at once instead of
 strictly one-at-a-time, so wall-clock time drops roughly in proportion.
 Pass a smaller `max_workers` to `BookRecommender(...)` on a more constrained
 machine, or a larger one for more speed at the cost of more concurrent load
-on Open Library/Wikipedia. Further levers (reusing HTTP connections, skipping
-the Wikipedia fallback for candidates, caching lookups across repeated
-`/recommend` calls) were considered and are still on the table if this isn't
-fast enough.
+on Open Library/Wikipedia.
+
+All of those lookups also go through one shared `requests.Session`
+(`utils/metadata_client.py`) instead of opening a fresh connection per
+request, so repeated requests to the same host reuse an already-open TCP/TLS
+connection — a smaller, free win on top of the thread pool. Further levers
+(skipping the Wikipedia fallback for candidates, caching lookups across
+repeated `/recommend` calls) were considered and are still on the table if
+this isn't fast enough.
 
 ## Key files
 
