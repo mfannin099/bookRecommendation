@@ -8,6 +8,7 @@ similarity against the read-books profile.
 import os
 import re
 import string
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -25,8 +26,16 @@ class BookRecommender:
 
     def __init__(self, books, cache_path="library.parquet",
                  force_run=False, terms_in_search_query=3, candidate_pool_size=40,
-                 already_read_match_score=85, top_n=10):
-        """books: list of (title, author) tuples for the books already read."""
+                 already_read_match_score=85, top_n=10, max_workers=5):
+        """books: list of (title, author) tuples for the books already read.
+
+        max_workers caps how many metadata fetches run concurrently. Each
+        fetch is I/O-bound (mostly waiting on the network), so this is cheap
+        on CPU/memory even on a modest machine - the default of 5 is a
+        balance between speed and being polite to the free Open
+        Library/Wikipedia APIs. Lower it on a more constrained machine or
+        raise it for more speed at the cost of more concurrent API load.
+        """
 
         self.titles_list = [title for title, _author in books]
         self.authors_list = [author for _title, author in books]
@@ -36,22 +45,32 @@ class BookRecommender:
         self.candidate_pool_size = candidate_pool_size
         self.already_read_match_score = already_read_match_score
         self.top_n = top_n
+        self.max_workers = max_workers
 
         self.client = MetadataClient()
         self.library_df = None
 
     def build_library(self):
-        """Fetch metadata for every read book via Open Library / Wikipedia."""
+        """Fetch metadata for every read book via Open Library / Wikipedia,
+        up to max_workers at a time since each lookup is independent and
+        I/O-bound."""
         rows = []
-        for title, author in zip(self.titles_list, self.authors_list):
-            print(f"Fetching: {title}")
-            result = self.client.fetch(title, author)
-            if result is None:
-                print(f"  no metadata found for '{title}'")
-                continue
-            result["title"] = title
-            result["author"] = author
-            rows.append(result)
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            futures = {}
+            for title, author in zip(self.titles_list, self.authors_list):
+                print(f"Fetching: {title}")
+                future = executor.submit(self.client.fetch, title, author)
+                futures[future] = (title, author)
+
+            for future in as_completed(futures):
+                title, author = futures[future]
+                result = future.result()
+                if result is None:
+                    print(f"  no metadata found for '{title}'")
+                    continue
+                result["title"] = title
+                result["author"] = author
+                rows.append(result)
 
         df = pd.DataFrame(rows)
         df.to_parquet(self.cache_path)
@@ -105,17 +124,23 @@ class BookRecommender:
         return filtered
 
     def enrich_candidates(self, candidates):
-        """Fetch descriptions for candidate books."""
+        """Fetch descriptions for candidate books, up to max_workers at a
+        time since each lookup is independent and I/O-bound."""
         enriched = []
-        for c in candidates:
-            result = self.client.fetch(c["title"], c["author"])
-            if result is None or not result.get("description"):
-                continue
-            enriched.append({
-                "title": c["title"],
-                "author": c["author"],
-                "description": result["description"],
-            })
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            futures = {executor.submit(self.client.fetch, c["title"], c["author"]): c
+                       for c in candidates}
+
+            for future in as_completed(futures):
+                c = futures[future]
+                result = future.result()
+                if result is None or not result.get("description"):
+                    continue
+                enriched.append({
+                    "title": c["title"],
+                    "author": c["author"],
+                    "description": result["description"],
+                })
         return enriched
 
     def rank_candidates(self, vectorizer, profile_df, candidates):

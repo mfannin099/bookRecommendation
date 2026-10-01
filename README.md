@@ -102,9 +102,23 @@ before the Open Library attempt, 0.5s more before falling back to Wikipedia —
 Open Library has no documented rate limit so it only needs a light courtesy
 delay, but Wikipedia does rate-limit and its fallback also means two extra
 requests, plus up to 3 retries with backoff if it 429s). A single `/recommend`
-call or `quick_start.py` run can still add up to 80-150+ sequential network
-requests — that's expected, not a bug. It's a straightforward tradeoff for
-using free, keyless APIs instead of a paid one with better rate limits.
+call or `quick_start.py` run can still add up to 80-150+ network requests
+total — that's expected, not a bug. It's a straightforward tradeoff for using
+free, keyless APIs instead of a paid one with better rate limits.
+
+These fetches now run concurrently rather than strictly one at a time:
+`BookRecommender` uses a bounded thread pool (`max_workers`, default 5) for
+both the read-books lookup and candidate enrichment, since each lookup is
+independent and I/O-bound (mostly waiting on the network, not using CPU) —
+cheap to parallelize even on a modest machine. Total request count is
+unchanged, but up to `max_workers` of them are in flight at once instead of
+strictly one-at-a-time, so wall-clock time drops roughly in proportion.
+Pass a smaller `max_workers` to `BookRecommender(...)` on a more constrained
+machine, or a larger one for more speed at the cost of more concurrent load
+on Open Library/Wikipedia. Further levers (reusing HTTP connections, skipping
+the Wikipedia fallback for candidates, caching lookups across repeated
+`/recommend` calls) were considered and are still on the table if this isn't
+fast enough.
 
 ## Key files
 
