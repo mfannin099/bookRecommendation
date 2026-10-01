@@ -13,21 +13,37 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+def _dedupe_key(title, author):
+    return (title.strip().lower(), author.strip().lower())
+
+
 @app.route('/', methods=["GET", 'POST'])
 def homepage():
     book = None
     author = None
+    duplicate = False
 
     if request.method == 'POST':
         book = request.form.get('book')  # Using .get() here
         author = request.form.get('author')  # Using .get() here
 
         if book and author:  # Ensure both book and author are not None or empty
-            book_list.append(book)
-            author_list.append(author)
-            return redirect('/')  # Redirect to clear the form after submission
+            existing = {_dedupe_key(b, a) for b, a in zip(book_list, author_list)}
+            if _dedupe_key(book, author) in existing:
+                duplicate = True
+            else:
+                book_list.append(book)
+                author_list.append(author)
+                return redirect('/')  # Redirect to clear the form after submission
 
-    return render_template('index.html', book=book, author=author, book_list=book_list, author_list=author_list)
+    added = request.args.get('added', type=int)
+    skipped = request.args.get('skipped', type=int)
+
+    return render_template(
+        'index.html', book=book, author=author, duplicate=duplicate,
+        added=added, skipped=skipped,
+        book_list=book_list, author_list=author_list,
+    )
 
 def _find_column(columns, name):
     for col in columns:
@@ -54,7 +70,11 @@ def parse_book_file(file_storage):
                 continue
             if ' - ' not in line:
                 raise ValueError(f"'{line}' in {filename} is not in 'Title - Author' format")
-            title, author = line.split(' - ', 1)
+            # Split on the LAST ' - ' rather than the first: subtitled
+            # titles commonly contain their own ' - ' (e.g. "Chip War - The
+            # Fight for the World's Most Critical Technology"), but an
+            # author name essentially never does.
+            title, author = line.rsplit(' - ', 1)
             pairs.append((title.strip(), author.strip()))
         return pairs
 
@@ -82,21 +102,30 @@ def upload_files():
     try:
         files = [f for f in request.files.getlist('files') if f.filename]
         if not files:
-            return "<h2> Please select at least one file. <a href='/'>Go back</a></h2>"
+            return render_template('error.html', message="Please select at least one file.")
 
         for f in files:
             if not allowed_file(f.filename):
-                return f"<h2> Unsupported file type: {f.filename}. <a href='/'>Go back</a></h2>"
+                return render_template('error.html', message=f"Unsupported file type: {f.filename}.")
 
+        existing = {_dedupe_key(b, a) for b, a in zip(book_list, author_list)}
+        added = 0
+        skipped = 0
         for f in files:
             for title, author in parse_book_file(f):
+                key = _dedupe_key(title, author)
+                if key in existing:
+                    skipped += 1
+                    continue
+                existing.add(key)
                 book_list.append(title)
                 author_list.append(author)
+                added += 1
 
-        return redirect('/')
+        return redirect(f'/?added={added}&skipped={skipped}')
 
     except Exception as e:
-        return f"<h2> Error uploading files: {e}. <a href='/'>Go back</a></h2>"
+        return render_template('error.html', message=f"Error uploading files: {e}")
 
 @app.route('/delete', methods=['POST'])
 def delete_entry():
@@ -126,7 +155,10 @@ def edit_entry():
 def recommend():
     try:
         if not book_list or not author_list:
-            return "<h2>⚠️ You must enter at least one book and author before getting recommendations. <a href='/'>Go back</a></h2>"
+            return render_template(
+                'error.html',
+                message="You must enter at least one book and author before getting recommendations.",
+            )
 
         # Create recommender and get recommendations (Class that makes recommendations)
         recommender = BookRecommender(books=list(zip(book_list, author_list)), force_run=True)

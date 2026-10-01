@@ -16,6 +16,9 @@
                         <br><small>{{ book.subtitle }}</small>
                     {% endif %}
                     <br>by {{ book.authors }}
+                    {% if book.description %}
+                        <p style="color: #6b7280; font-size: 0.9em; margin: 6px 0 0;">{{ book.description }}</p>
+                    {% endif %}
                 </div>
             </li>
             {% endfor %}

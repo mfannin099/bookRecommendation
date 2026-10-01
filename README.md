@@ -34,16 +34,25 @@ What you'll see:
 
 1. **Homepage** (`/`) — a form to add one book (title + author) at a time, plus
    the running list of what you've added so far, with edit/delete controls next
-   to each entry.
+   to each entry. Adding a book already in your list is a no-op (with a message
+   saying so) rather than a silent duplicate.
 2. **Upload** (`/upload`) — add many books at once instead of typing them in.
    Accepts multiple files per upload, any mix of:
    - `.csv` / `.xlsx` with `title` and `author` columns (case-insensitive) — the
      same shape as `data/books_clean.csv`, so you can upload that file directly.
-   - `.txt` with one `Title - Author` per line.
+   - `.txt` with one `Title - Author` per line. If your title itself contains
+     `" - "` (common in subtitled nonfiction, e.g. "Chip War - The Fight for
+     the World's Most Critical Technology"), it's split on the *last*
+     `" - "` in the line, since an author name essentially never contains one.
+   After uploading, you'll see how many books were added and how many were
+   skipped as duplicates of ones already in your list.
 3. **Get Recommendations** (`/recommend`) — once your list has at least one book,
    this triggers the pipeline: look up each book's description, build a search
    query from the most distinctive terms across them, search Open Library for
-   similar titles you haven't already read, and rank the results.
+   similar titles you haven't already read, and rank the results. Each result
+   shows a description snippet, not just a bare title, and weak/spurious
+   matches are dropped rather than padded in to fill out a round number of
+   recommendations.
 
 Your list lives only in the running process's memory — nothing is written to
 disk. **This app has no persistence across restarts**, by design. There's

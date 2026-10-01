@@ -26,7 +26,8 @@ class BookRecommender:
 
     def __init__(self, books, cache_path="library.parquet",
                  force_run=False, terms_in_search_query=3, candidate_pool_size=40,
-                 already_read_match_score=85, top_n=10, max_workers=5):
+                 already_read_match_score=85, top_n=10, max_workers=5,
+                 min_similarity=0.05):
         """books: list of (title, author) tuples for the books already read.
 
         max_workers caps how many metadata fetches run concurrently. Each
@@ -35,6 +36,11 @@ class BookRecommender:
         balance between speed and being polite to the free Open
         Library/Wikipedia APIs. Lower it on a more constrained machine or
         raise it for more speed at the cost of more concurrent API load.
+
+        min_similarity drops candidates whose cosine similarity to the
+        read-books profile falls below this floor, rather than always
+        padding out to top_n regardless of match quality - see
+        rank_candidates.
         """
 
         self.titles_list = [title for title, _author in books]
@@ -46,6 +52,7 @@ class BookRecommender:
         self.already_read_match_score = already_read_match_score
         self.top_n = top_n
         self.max_workers = max_workers
+        self.min_similarity = min_similarity
 
         self.client = MetadataClient()
         self.library_df = None
@@ -110,17 +117,25 @@ class BookRecommender:
         return " ".join(top_keywords)
 
     def fetch_candidates(self, search_query):
-        """Search Open Library for candidates and exclude already-read titles."""
+        """Search Open Library for candidates, excluding already-read titles
+        and near-duplicates of a candidate already kept (Open Library often
+        returns the same work twice under slightly different editions/casing,
+        e.g. "The Man Who Loved China" and "the man who loved china")."""
         already_read = set(self.titles_list)
         candidates = search_open_library_candidates(search_query, limit=self.candidate_pool_size)
 
         filtered = []
+        kept_titles = []
         for c in candidates:
             title = c["title"]
             if any(fuzz.partial_ratio(title.lower(), read.lower()) >= self.already_read_match_score
                    for read in already_read):
                 continue
+            if any(fuzz.ratio(title.lower(), kept.lower()) >= self.already_read_match_score
+                   for kept in kept_titles):
+                continue
             filtered.append(c)
+            kept_titles.append(title)
         return filtered
 
     def enrich_candidates(self, candidates):
@@ -140,11 +155,17 @@ class BookRecommender:
                     "title": c["title"],
                     "author": c["author"],
                     "description": result["description"],
+                    "subtitle": result.get("subtitle"),
                 })
         return enriched
 
     def rank_candidates(self, vectorizer, profile_df, candidates):
-        """Rank candidates by cosine similarity against the read-books profile."""
+        """Rank candidates by cosine similarity against the read-books profile.
+
+        Candidates below min_similarity are dropped rather than padding the
+        result out to top_n regardless of match quality - a weak keyword
+        match (e.g. a candidate that only shares one generic word with the
+        profile) is worse than returning fewer, more confident picks."""
         candidates_df = pd.DataFrame(candidates)
         candidates_df["clean_description"] = candidates_df["description"].apply(strip_punctuation)
 
@@ -154,9 +175,18 @@ class BookRecommender:
         candidate_vectors = vectorizer.transform(candidates_df["clean_description"])
         candidates_df["similarity"] = cosine_similarity(candidate_vectors, profile_vector).flatten()
 
+        candidates_df = candidates_df[candidates_df["similarity"] >= self.min_similarity]
+        if candidates_df.empty:
+            raise ValueError(
+                "No candidates were similar enough to your reading profile to recommend confidently."
+            )
+
         candidates_df = candidates_df.sort_values("similarity", ascending=False)
         candidates_df["authors"] = candidates_df["author"]
-        return candidates_df[["title", "authors"]].head(self.top_n)
+        candidates_df["description"] = candidates_df["description"].apply(
+            lambda d: d if len(d) <= 240 else d[:240].rsplit(" ", 1)[0] + "..."
+        )
+        return candidates_df[["title", "subtitle", "authors", "description", "similarity"]].head(self.top_n)
 
     def get_recommendations(self):
         """Main method to run the complete recommendation pipeline."""
