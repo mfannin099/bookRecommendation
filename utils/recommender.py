@@ -1,7 +1,7 @@
 """Book recommendation pipeline.
 
-Builds a taste profile from the user's read books (via metadata.py's Open
-Library / Wikipedia lookups), searches Open Library for candidate books,
+Builds a taste profile from the user's read books (via metadata_client.py's
+Open Library / Wikipedia lookups), searches Open Library for candidate books,
 excludes anything already read, and ranks candidates by TF-IDF cosine
 similarity against the read-books profile.
 """
@@ -14,7 +14,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from thefuzz import fuzz
 
-from metadata import MetadataClient, search_open_library_candidates
+from utils.metadata_client import MetadataClient, search_open_library_candidates
 
 
 def strip_punctuation(text):

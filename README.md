@@ -63,14 +63,14 @@ the project root:
 |---|---|---|
 | `quick_start.py` | Run the recommendation pipeline against a couple of hardcoded books (`BOOKS` list at the top of the file — edit it to try your own), no Flask/browser needed. Good for checking the pipeline still works end to end. | `uv run python quick_start.py` |
 | `scripts/clean_books_data.py` | Turn your raw reading-log export (`data/Book Tracker - Sheet1.csv`) into the cleaned `data/books_clean.csv` / `.parquet` — dedupes rows, standardizes dates/genres. Run this after editing the raw sheet. | `uv run python scripts/clean_books_data.py` |
-| `scripts/test_metadata_coverage.py` | Reports what fraction of your real reading history gets a usable description from Open Library vs. Wikipedia vs. neither. Useful after changing `metadata.py` or the source data, to see whether coverage got better or worse. | `uv run python scripts/test_metadata_coverage.py` |
+| `scripts/test_metadata_coverage.py` | Reports what fraction of your real reading history gets a usable description from Open Library vs. Wikipedia vs. neither. Useful after changing `utils/metadata_client.py` or the source data, to see whether coverage got better or worse. | `uv run python scripts/test_metadata_coverage.py` |
 
 None of these take command-line arguments — settings (file paths, thresholds)
 are constants near the top of each file if you need to change them.
 
 ## Using the metadata lookup directly
 
-`metadata.py` doesn't expose a web API of its own — it's a plain Python module
+`utils/metadata_client.py` doesn't expose a web API of its own — it's a plain Python module
 you call from code. If you want to test a single lookup without running the
 whole app, drop into a Python shell in the project root:
 
@@ -79,7 +79,7 @@ uv run python
 ```
 
 ```python
-from metadata import MetadataClient
+from utils.metadata_client import MetadataClient
 
 client = MetadataClient()
 result = client.fetch("Why Machines Learn", "Anil Ananthaswamy")
@@ -110,10 +110,10 @@ using free, keyless APIs instead of a paid one with better rate limits.
 
 - `main.py` — the Flask app: routes for adding/uploading/editing/deleting books
   and triggering recommendations.
-- `utils.py` — the `BookRecommender` class: the recommendation pipeline (metadata
+- `utils/recommender.py` — the `BookRecommender` class: the recommendation pipeline (metadata
   lookup → TF-IDF profile → Open Library candidate search → cosine-similarity
   ranking).
-- `metadata.py` — the Open Library / Wikipedia lookup client shared by
+- `utils/metadata_client.py` — the Open Library / Wikipedia lookup client shared by
   everything above (see "Using the metadata lookup directly").
 - `scripts/clean_books_data.py` — cleans the raw personal reading-log export.
 - `scripts/test_metadata_coverage.py` — measures description coverage against

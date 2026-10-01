@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, redirect
 import pandas as pd
-from utils import BookRecommender
+from utils.recommender import BookRecommender
 
 app = Flask(__name__)
 

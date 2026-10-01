@@ -1,4 +1,4 @@
-from utils import BookRecommender
+from utils.recommender import BookRecommender
 
 BOOKS = [
     ("The Great Gatsby", "F. Scott Fitzgerald"),
