@@ -160,8 +160,13 @@ def recommend():
                 message="You must enter at least one book and author before getting recommendations.",
             )
 
+        genres = request.args.get('genres', '')
+        genre_keywords = [g.strip() for g in genres.split(',') if g.strip()]
+
         # Create recommender and get recommendations (Class that makes recommendations)
-        recommender = BookRecommender(books=list(zip(book_list, author_list)), force_run=True)
+        recommender = BookRecommender(
+            books=list(zip(book_list, author_list)), force_run=True, genre_keywords=genre_keywords,
+        )
 
         recommendations = recommender.get_recommendations()
         return render_template("recommend.html", recommendations=recommendations.to_dict(orient='records'))

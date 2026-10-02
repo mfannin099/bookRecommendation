@@ -27,7 +27,7 @@ class BookRecommender:
     def __init__(self, books, cache_path="library.parquet",
                  force_run=False, terms_in_search_query=3, candidate_pool_size=40,
                  already_read_match_score=85, top_n=10, max_workers=5,
-                 min_similarity=0.05):
+                 min_similarity=0.05, genre_keywords=None, genre_boost_repeats=5):
         """books: list of (title, author) tuples for the books already read.
 
         max_workers caps how many metadata fetches run concurrently. Each
@@ -41,6 +41,13 @@ class BookRecommender:
         read-books profile falls below this floor, rather than always
         padding out to top_n regardless of match quality - see
         rank_candidates.
+
+        genre_keywords optionally steers recommendations toward a genre
+        (e.g. ["business", "psychology"]) without changing your actual
+        reading list - see clean_library and build_search_query for the two
+        places this takes effect. genre_boost_repeats controls how strongly:
+        a light touch by default, nudging the profile rather than dominating
+        it, so your actual books still drive most of the signal.
         """
 
         self.titles_list = [title for title, _author in books]
@@ -53,6 +60,8 @@ class BookRecommender:
         self.top_n = top_n
         self.max_workers = max_workers
         self.min_similarity = min_similarity
+        self.genre_keywords = [g.strip().lower() for g in (genre_keywords or []) if g.strip()]
+        self.genre_boost_repeats = genre_boost_repeats
 
         self.client = MetadataClient()
         self.library_df = None
@@ -94,27 +103,46 @@ class BookRecommender:
         return self.library_df
 
     def clean_library(self):
-        """Drop books with no usable description and strip punctuation for TF-IDF."""
+        """Drop books with no usable description and strip punctuation for TF-IDF.
+
+        If genre_keywords are set, append them (repeated genre_boost_repeats
+        times) to every row's clean_description. This is the one injection
+        point for the genre-steering feature: it shifts both the TF-IDF
+        vocabulary/IDF used to build the search query (build_search_query)
+        and the profile centroid used for ranking (rank_candidates) toward
+        the genre, without a separate mechanism for each."""
         df = self.library_df.copy()
         df = df.dropna(subset=["description"])
         df["clean_description"] = df["description"].apply(strip_punctuation)
+
+        if self.genre_keywords:
+            boost_text = " " + " ".join(self.genre_keywords * self.genre_boost_repeats)
+            df["clean_description"] = df["clean_description"] + boost_text
+
         return df
 
     def build_search_query(self, vectorizer, df):
         """Derive a candidate search query from the top TF-IDF terms across
-        all read-book descriptions.
+        all read-book descriptions, plus any genre_keywords.
 
         Open Library's search treats space-separated terms as a strict AND,
         so keep terms_in_search_query small (default 3) - piling on more
-        terms collapses the result count to near zero.
+        terms collapses the result count to near zero. genre_keywords are
+        guaranteed to be included (rather than relying on clean_library's
+        repetition alone to make them statistically dominant), so the
+        auto-derived term count shrinks to make room for them within the
+        same overall budget.
         """
         tfidf_matrix = vectorizer.transform(df["clean_description"])
         feature_names = vectorizer.get_feature_names_out()
         scores = tfidf_matrix.sum(axis=0).A1
 
-        top_indices = scores.argsort()[-self.terms_in_search_query:][::-1]
+        auto_term_count = max(self.terms_in_search_query - len(self.genre_keywords), 1)
+        top_indices = scores.argsort()[-auto_term_count:][::-1]
         top_keywords = [feature_names[i] for i in top_indices]
-        return " ".join(top_keywords)
+
+        all_terms = list(dict.fromkeys([*self.genre_keywords, *top_keywords]))
+        return " ".join(all_terms)
 
     def fetch_candidates(self, search_query):
         """Search Open Library for candidates, excluding already-read titles

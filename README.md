@@ -53,7 +53,14 @@ What you'll see:
    similar titles you haven't already read, and rank the results. Each result
    shows a description snippet, not just a bare title, and weak/spurious
    matches are dropped rather than padded in to fill out a round number of
-   recommendations.
+   recommendations. There's also an optional "steer toward genre" field on
+   this form — type a genre (or a few, comma-separated, e.g. "golf, business")
+   to nudge results that direction without changing your actual reading list.
+   It's a light touch by default: your own books still drive most of the
+   signal, but it's enough to meaningfully shift results (tested: a reading
+   list with no golf books at all still returned nearly all golf
+   recommendations when "golf" was typed in). Leave it blank for today's
+   behavior, typed fresh each time you click the button — nothing is saved.
 
 Your list lives only in the running process's memory — nothing is written to
 disk. **This app has no persistence across restarts**, by design. There's

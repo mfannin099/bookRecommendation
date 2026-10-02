@@ -103,6 +103,11 @@
     </div>
 
     <form action="/recommend" method="GET" style="text-align: center; margin-top: 20px;">
+        <label for="genres" style="display: block; font-size: 0.85em; color: #6b7280; margin-bottom: 4px;">
+            Steer toward genre (optional, comma-separated):
+        </label>
+        <input type="text" id="genres" name="genres" placeholder="e.g. business, psychology"
+            style="margin-bottom: 10px; width: 260px;"><br>
         <input type="submit" value="✨ Get Recommendations">
     </form>
 
