@@ -203,7 +203,12 @@ def recommend():
         )
 
         recommendations = recommender.get_recommendations()
-        return render_template("recommend.html", recommendations=recommendations.to_dict(orient='records'))
+        return render_template(
+            "recommend.html",
+            recommendations=recommendations.to_dict(orient='records'),
+            matched_book_count=recommender.matched_book_count,
+            total_book_count=recommender.total_book_count,
+        )
 
     except Exception as e:
         error_message = f"Error: {e}. Please enter more books."

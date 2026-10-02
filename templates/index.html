@@ -10,7 +10,36 @@
         <h2>My Book Recommendation System</h2>
     </div>
 
-    
+    <!-- Feedback from manual add -->
+    {% if duplicate %}
+        <div class="warning-message" style="max-width: 600px; margin: 20px auto;">
+            ⚠️ Already in your list
+            <p>"{{ book }}" by {{ author }} is already there — not added again.</p>
+        </div>
+    {% elif book and author %}
+        <div class="success-message" style="max-width: 600px; margin: 20px auto;">
+            ✅ Added "{{ book }}" by {{ author }}
+        </div>
+    {% endif %}
+
+    <!-- Feedback from file upload -->
+    {% if added is not none %}
+        <div class="{{ 'success-message' if added > 0 else 'warning-message' }}"
+             style="max-width: 600px; margin: 20px auto;">
+            {% if added > 0 and skipped > 0 %}
+                ✅ Added {{ added }} book{{ 's' if added != 1 }}
+                <p>({{ skipped }} already in your list, skipped)</p>
+            {% elif added > 0 %}
+                ✅ Added {{ added }} book{{ 's' if added != 1 }}
+            {% elif skipped > 0 %}
+                ⚠️ No new books added
+                <p>All {{ skipped }} book{{ 's' if skipped != 1 }} in that file were already in your list.</p>
+            {% else %}
+                ⚠️ No books found in that file
+            {% endif %}
+        </div>
+    {% endif %}
+
     <!-- File Upload Section -->
     <div style="max-width: 600px; margin: 20px auto;">
         <form method="POST" action="/upload" enctype="multipart/form-data">
@@ -47,40 +76,6 @@
             </fieldset>
         </form>
     </div>
-
-    <!-- Feedback from manual add -->
-    {% if duplicate %}
-        <hr>
-        <div style="text-align: center;">
-            <h3>⚠️ Already in your list</h3>
-            <p>"{{ book }}" by {{ author }} is already there — not added again.</p>
-        </div>
-    {% elif book and author %}
-        <hr>
-        <div style="text-align: center;">
-            <h3>✅ You Just Entered:</h3>
-            <p><strong>Book:</strong> {{ book }}</p>
-            <p><strong>Author:</strong> {{ author }}</p>
-        </div>
-    {% endif %}
-
-    <!-- Feedback from file upload -->
-    {% if added is not none %}
-        <hr>
-        <div style="text-align: center;">
-            {% if added > 0 and skipped > 0 %}
-                <h3>✅ Added {{ added }} book{{ 's' if added != 1 }}</h3>
-                <p>({{ skipped }} already in your list, skipped)</p>
-            {% elif added > 0 %}
-                <h3>✅ Added {{ added }} book{{ 's' if added != 1 }}</h3>
-            {% elif skipped > 0 %}
-                <h3>⚠️ No new books added</h3>
-                <p>All {{ skipped }} book{{ 's' if skipped != 1 }} in that file were already in your list.</p>
-            {% else %}
-                <h3>⚠️ No books found in that file</h3>
-            {% endif %}
-        </div>
-    {% endif %}
 
     <hr>
     <div style="max-width: 600px; margin: 0 auto; text-align: center;">

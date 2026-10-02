@@ -6,7 +6,15 @@
 <body>
     <div class="container">
         <h2>Your Book Recommendations</h2>
-        
+
+        <p style="text-align: center; color: #6b7280; font-size: 0.9em; margin: -24px 0 32px;">
+            Based on {{ matched_book_count }} of your {{ total_book_count }}
+            book{{ 's' if total_book_count != 1 }}
+            {%- if matched_book_count < total_book_count %}
+                — {{ total_book_count - matched_book_count }} couldn't be matched to a description
+            {%- endif %}
+        </p>
+
         <ul>
             {% for book in recommendations %}
             <li>

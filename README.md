@@ -49,15 +49,20 @@ What you'll see:
      `" - "` (common in subtitled nonfiction, e.g. "Chip War - The Fight for
      the World's Most Critical Technology"), it's split on the *last*
      `" - "` in the line, since an author name essentially never contains one.
-   After uploading, you'll see how many books were added and how many were
-   skipped as duplicates of ones already in your list.
+   After uploading, a banner right at the top of the page (impossible to
+   miss — no scrolling needed) shows how many books were added and how many
+   were skipped as duplicates of ones already in your list.
 3. **Get Recommendations** (`/recommend`) — once your list has at least one book,
    this triggers the pipeline: look up each book's description, build a search
    query from the most distinctive terms across them, search Open Library for
-   similar titles you haven't already read, and rank the results. Each result
-   shows a description snippet, not just a bare title, and weak/spurious
-   matches are dropped rather than padded in to fill out a round number of
-   recommendations. There's also an optional "steer toward genre" field on
+   similar titles you haven't already read, and rank the results. The page
+   tells you up front how many of your books it could actually match to a
+   description (e.g. "Based on 41 of your 58 books — 17 couldn't be matched
+   to a description"), so you know how much of your library the
+   recommendations are really built from. Each result shows a description
+   snippet, not just a bare title, and weak/spurious matches are dropped
+   rather than padded in to fill out a round number of recommendations.
+   There's also an optional "steer toward genre" field on
    this form — type a genre (or a few, comma-separated, e.g. "golf, business")
    to nudge results that direction without changing your actual reading list.
    It's a light touch by default: your own books still drive most of the

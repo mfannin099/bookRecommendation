@@ -221,6 +221,12 @@ class BookRecommender:
         self.load_or_build_library()
         profile_df = self.clean_library()
 
+        # Exposed for the caller to show "N of M books matched" - how many
+        # of the submitted books actually had a usable description to build
+        # the taste profile from, vs. how many were submitted.
+        self.total_book_count = len(self.titles_list)
+        self.matched_book_count = len(profile_df)
+
         if profile_df.empty:
             raise ValueError(
                 "No metadata could be found for any of your books - can't build recommendations."
