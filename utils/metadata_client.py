@@ -1,19 +1,30 @@
-"""Book metadata lookup: Open Library first, falling back to Wikipedia.
+"""Book metadata lookup: Open Library, then Wikipedia, then iTunes.
 
 Open Library is free/keyless and often has richer subject tags, but frequently
 lacks a usable `description` for a given work -- especially for business /
-nonfiction titles. When that happens we fall back to Wikipedia (also free and
-keyless) so downstream TF-IDF steps always have something to work with.
+nonfiction titles. When that happens we fall back to Wikipedia, and if that
+also misses, to Apple's iTunes Search API (ebook listings) -- all three are
+free and keyless, so downstream TF-IDF steps always have something to work
+with as often as possible.
 """
+import html
+import re
 import time
 from urllib.parse import quote
 
 import requests
+from thefuzz import fuzz
 
 OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json"
 OPEN_LIBRARY_WORK_URL = "https://openlibrary.org{key}.json"
 WIKIPEDIA_SEARCH_URL = "https://en.wikipedia.org/w/api.php"
 WIKIPEDIA_SUMMARY_URL = "https://en.wikipedia.org/api/rest_v1/page/summary/{title}"
+ITUNES_SEARCH_URL = "https://itunes.apple.com/search"
+
+# iTunes's free-text search can return a different book by the right author
+# (a companion/summary title, another edition) rather than no result, so a
+# match is only trusted when the title is also a close fuzzy match.
+ITUNES_TITLE_MATCH_THRESHOLD = 70
 
 # Shared across every lookup (and every worker thread in BookRecommender's
 # thread pool) so repeated requests to the same host reuse an already-open
@@ -145,6 +156,63 @@ def fetch_from_wikipedia(title, author):
         return None
 
 
+def _strip_html(text):
+    """iTunes descriptions are HTML-formatted marketing copy (<b>, <br />,
+    escaped entities) rather than plain text like Open Library/Wikipedia."""
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = html.unescape(text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def fetch_from_itunes(title, author):
+    """Second fallback lookup via Apple's iTunes Search API (ebook listings).
+    Free and keyless like Open Library/Wikipedia, but its free-text search is
+    looser still: it can return a different book by the right author (another
+    edition, a companion/summary title) rather than no result at all, so a
+    match is only trusted when the title is also a close fuzzy match -- not
+    just the author being correct."""
+    if not author:
+        return None
+
+    try:
+        resp = _SESSION.get(
+            ITUNES_SEARCH_URL,
+            params={"term": f"{title} {author}", "media": "ebook", "limit": 1},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        results = resp.json().get("results", [])
+        if not results:
+            return None
+
+        info = results[0]
+        track_name = info.get("trackName", "")
+        artist_name = info.get("artistName", "") or ""
+        description = info.get("description")
+        if not description:
+            return None
+
+        title_match = fuzz.partial_ratio(title.lower(), track_name.lower())
+        if title_match < ITUNES_TITLE_MATCH_THRESHOLD:
+            return None
+        if author.strip().lower() not in artist_name.lower():
+            return None
+
+        return {
+            "title": track_name,
+            "subtitle": None,
+            "authors": [artist_name] if artist_name else None,
+            "publishedDate": info.get("releaseDate"),
+            "pageCount": None,
+            "categories": info.get("genres"),
+            "description": _strip_html(description),
+            "source": "itunes",
+        }
+    except Exception as e:
+        print(f"iTunes lookup failed for '{title}' by '{author}': {e}")
+        return None
+
+
 def search_open_library_candidates(query, limit=40):
     """Search Open Library for candidate books matching a query string."""
     try:
@@ -165,22 +233,30 @@ def search_open_library_candidates(query, limit=40):
 
 
 class MetadataClient:
-    """Fetches book metadata, preferring Open Library and falling back to
-    Wikipedia when Open Library has no usable description."""
+    """Fetches book metadata, preferring Open Library, then Wikipedia, then
+    iTunes, stopping at the first usable description."""
 
-    def __init__(self, open_library_pause=0.2, wikipedia_pause=0.5):
+    def __init__(self, open_library_pause=0.2, wikipedia_pause=0.5, itunes_pause=1.0):
         self.open_library_pause = open_library_pause
         self.wikipedia_pause = wikipedia_pause
+        self.itunes_pause = itunes_pause
 
     def fetch(self, title, author):
         """Open Library has no documented rate limit, so its pause is just a
         light courtesy delay. Wikipedia does rate-limit (see _wikipedia_get's
         429 backoff), so it gets a longer pause to make that less likely to
-        trigger in the first place."""
+        trigger in the first place. iTunes has no documented rate limit *or*
+        a clean signal (no 429/Retry-After) to react to if one is hit, so its
+        pause is a flat, conservative guess rather than adaptive backoff."""
         time.sleep(self.open_library_pause)
         result = fetch_from_open_library(title, author)
         if result is not None:
             return result
 
         time.sleep(self.wikipedia_pause)
-        return fetch_from_wikipedia(title, author)
+        result = fetch_from_wikipedia(title, author)
+        if result is not None:
+            return result
+
+        time.sleep(self.itunes_pause)
+        return fetch_from_itunes(title, author)

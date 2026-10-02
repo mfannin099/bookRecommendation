@@ -2,10 +2,11 @@
 
 A Flask app that recommends new books based on the books you've already read. You
 give it a list of titles/authors (typed in one at a time, or uploaded as a file),
-and it looks up each one on Open Library (falling back to Wikipedia when Open
-Library doesn't have a description), builds a taste profile from those
-descriptions, searches Open Library for similar books you haven't read yet, and
-ranks the results by how similar they are to your profile.
+and it looks up each one on Open Library (falling back to Wikipedia, then to
+Apple's iTunes Search API, when Open Library doesn't have a description), builds
+a taste profile from those descriptions, searches Open Library for similar books
+you haven't read yet, and ranks the results by how similar they are to your
+profile.
 
 ## Setup
 
@@ -16,8 +17,8 @@ no virtualenv/pip, no Docker.
 uv sync
 ```
 
-That's the only setup step. No API key or `.env` file is needed — both metadata
-sources (Open Library, Wikipedia) are free and keyless.
+That's the only setup step. No API key or `.env` file is needed — all three
+metadata sources (Open Library, Wikipedia, iTunes) are free and keyless.
 
 ## Running the web app
 
@@ -72,7 +73,7 @@ the project root:
 |---|---|---|
 | `quick_start.py` | Run the recommendation pipeline against a couple of hardcoded books (`BOOKS` list at the top of the file — edit it to try your own), no Flask/browser needed. Good for checking the pipeline still works end to end. | `uv run python quick_start.py` |
 | `scripts/clean_books_data.py` | Turn your raw reading-log export (`data/Book Tracker - Sheet1.csv`) into the cleaned `data/books_clean.csv` / `.parquet` — dedupes rows, standardizes dates/genres. Run this after editing the raw sheet. | `uv run python scripts/clean_books_data.py` |
-| `scripts/test_metadata_coverage.py` | Reports what fraction of your real reading history gets a usable description from Open Library vs. Wikipedia vs. neither. Useful after changing `utils/metadata_client.py` or the source data, to see whether coverage got better or worse. | `uv run python scripts/test_metadata_coverage.py` |
+| `scripts/test_metadata_coverage.py` | Reports what fraction of your real reading history gets a usable description from Open Library vs. Wikipedia vs. iTunes vs. none. Useful after changing `utils/metadata_client.py` or the source data, to see whether coverage got better or worse. | `uv run python scripts/test_metadata_coverage.py` |
 
 None of these take command-line arguments — settings (file paths, thresholds)
 are constants near the top of each file if you need to change them.
@@ -92,28 +93,30 @@ from utils.metadata_client import MetadataClient
 
 client = MetadataClient()
 result = client.fetch("Why Machines Learn", "Anil Ananthaswamy")
-print(result["source"])       # "open_library" or "wikipedia"
-print(result["description"])  # None if neither source had a match
+print(result["source"])       # "open_library", "wikipedia", or "itunes"
+print(result["description"])  # None if none of the three sources had a match
 ```
 
-`fetch()` always tries Open Library first and only falls back to Wikipedia if
-Open Library has no usable description; it returns `None` if neither source
-finds one. There's a built-in pause before each network call (see "Why it's
-slow" below), so don't loop this over a large list without expecting it to take
-a while.
+`fetch()` tries Open Library, then Wikipedia, then iTunes, stopping at the
+first usable description; it returns `None` if all three miss. There's a
+built-in pause before each network call (see "Why it's slow" below), so don't
+loop this over a large list without expecting it to take a while.
 
 ## Why it's slow
 
 The pipeline makes one live HTTP lookup per book it looks up metadata for —
 every book in your reading list, *and* every candidate book it's considering
 recommending (up to 40 by default). Each lookup has a built-in pause (0.2s
-before the Open Library attempt, 0.5s more before falling back to Wikipedia —
+before the Open Library attempt, 0.5s more before falling back to Wikipedia,
+1.0s more before falling back further to iTunes if Wikipedia also misses —
 Open Library has no documented rate limit so it only needs a light courtesy
-delay, but Wikipedia does rate-limit and its fallback also means two extra
-requests, plus up to 3 retries with backoff if it 429s). A single `/recommend`
-call or `quick_start.py` run can still add up to 80-150+ network requests
-total — that's expected, not a bug. It's a straightforward tradeoff for using
-free, keyless APIs instead of a paid one with better rate limits.
+delay; Wikipedia does rate-limit and its fallback also means two extra
+requests, plus up to 3 retries with backoff if it 429s; iTunes has no
+documented rate limit *or* a clean signal to react to if one is hit, so its
+pause is a flat, conservative guess rather than adaptive backoff). A single
+`/recommend` call or `quick_start.py` run can still add up to 150-250+ network
+requests total — that's expected, not a bug. It's a straightforward tradeoff
+for using free, keyless APIs instead of a paid one with better rate limits.
 
 These fetches now run concurrently rather than strictly one at a time:
 `BookRecommender` uses a bounded thread pool (`max_workers`, default 5) for
@@ -141,25 +144,31 @@ this isn't fast enough.
 - `utils/recommender.py` — the `BookRecommender` class: the recommendation pipeline (metadata
   lookup → TF-IDF profile → Open Library candidate search → cosine-similarity
   ranking).
-- `utils/metadata_client.py` — the Open Library / Wikipedia lookup client shared by
+- `utils/metadata_client.py` — the Open Library / Wikipedia / iTunes lookup client shared by
   everything above (see "Using the metadata lookup directly").
 - `scripts/clean_books_data.py` — cleans the raw personal reading-log export.
 - `scripts/test_metadata_coverage.py` — measures description coverage against
   real reading history.
 - `quick_start.py` — runs the recommender from the command line, no Flask UI.
 
-## Why Open Library, and why a Wikipedia fallback
+## Why Open Library, and why two fallbacks
 
 Open Library has no API key and no rate limit, which made it worth switching to
 as the primary source. But its `description` field is inconsistently populated,
 especially outside fiction — Open Library alone only found descriptions for
 about **36% of a 236-book test library** (mostly business/self-help nonfiction),
-measured before any fallback existed. Wikipedia was picked as that fallback
-(over Google Books) because it's also free and keyless — no API key to manage.
-With the Wikipedia fallback and the current (typo-fixed) data, coverage on the
-58-book accurately-tracked tail of `data/books_clean.csv` is **47%** (26%
-Open Library + 21% Wikipedia) — run `scripts/test_metadata_coverage.py` any
-time to re-measure it after further data or code changes.
+measured before any fallback existed. Wikipedia and Apple's iTunes Search API
+(ebook listings) were picked as those fallbacks (over Google Books, whose
+keyless access is now hard-disabled — `quota_limit_value: 0` on every
+unauthenticated request) because both are also free and keyless, with no
+account or API key to manage. The two are complementary rather than redundant:
+iTunes tends to cover current commercial nonfiction/self-help that Open Library
+misses, while missing niche/technical titles Wikipedia or Open Library catch.
+With all three sources and the current (typo-fixed) data, coverage on the
+58-book accurately-tracked tail of `data/books_clean.csv` is **71%** (28%
+Open Library + 19% Wikipedia + 24% iTunes) — up from 47% with just the
+Wikipedia fallback. Run `scripts/test_metadata_coverage.py` any time to
+re-measure it after further data or code changes.
 
 ## Tech stack
 
