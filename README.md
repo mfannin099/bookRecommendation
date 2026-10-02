@@ -39,8 +39,12 @@ What you'll see:
    saying so) rather than a silent duplicate.
 2. **Upload** (`/upload`) — add many books at once instead of typing them in.
    Accepts multiple files per upload, any mix of:
-   - `.csv` / `.xlsx` with `title` and `author` columns (case-insensitive) — the
-     same shape as `data/books_clean.csv`, so you can upload that file directly.
+   - `.csv` / `.xlsx` with a title column (`title`, `book`, `book title`, or
+     `name`) and an author column (`author`, `authors`, `author name`, or
+     `writer`) — case-insensitive, and comma-, semicolon-, or tab-separated
+     `.csv` all work. The same shape as `data/books_clean.csv`, so you can
+     upload that file directly. If the columns can't be found, the error
+     message shows exactly what columns were detected so you can fix the file.
    - `.txt` with one `Title - Author` per line. If your title itself contains
      `" - "` (common in subtitled nonfiction, e.g. "Chip War - The Fight for
      the World's Most Critical Technology"), it's split on the *last*

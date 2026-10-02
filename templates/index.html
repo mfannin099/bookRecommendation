@@ -19,7 +19,11 @@
                 <label for="files">Book list file(s) (.csv, .xlsx, or .txt):</label><br>
                 <input type="file" id="files" name="files" accept=".csv,.xlsx,.xls,.txt" multiple required><br>
                 <p style="font-size: 0.85em; color: #6b7280;">
-                    .csv/.xlsx need <code>title</code> and <code>author</code> columns.
+                    .csv/.xlsx need a title column (<code>title</code>, <code>book</code>,
+                    <code>book title</code>, or <code>name</code>) and an author column
+                    (<code>author</code>, <code>authors</code>, <code>author name</code>,
+                    or <code>writer</code>) — column names are case-insensitive, and a
+                    comma-, semicolon-, or tab-separated .csv all work.
                     .txt needs one <code>Title - Author</code> per line.
                     You can select more than one file at once.
                 </p>

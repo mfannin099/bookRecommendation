@@ -45,17 +45,49 @@ def homepage():
         book_list=book_list, author_list=author_list,
     )
 
-def _find_column(columns, name):
+# Real export tools vary their column naming (StoryGraph uses "Authors"
+# plural, LibraryThing often uses "Primary Author", etc.), so match against
+# a set of common aliases rather than requiring the exact words.
+TITLE_COLUMN_ALIASES = {"title", "book", "book title", "name"}
+AUTHOR_COLUMN_ALIASES = {"author", "authors", "author name", "writer"}
+
+
+def _find_column(columns, aliases):
     for col in columns:
-        if col.strip().lower() == name:
+        if col.strip().lower() in aliases:
             return col
     return None
+
+
+def _read_tabular(file_storage, ext):
+    """Read a .csv/.xlsx/.xls upload into a DataFrame.
+
+    For .csv, tries comma first, then semicolon/tab (non-US Excel locales
+    default to semicolon-separated exports) - but only accepts an alternate
+    separator if it actually produces a recognizable title and author
+    column, so a correctly comma-delimited file with a stray semicolon in
+    some data field can't be misinterpreted. Falls back to the comma-parsed
+    attempt if nothing works, so the caller's error message reflects what
+    was actually found."""
+    if ext in ('xlsx', 'xls'):
+        return pd.read_excel(file_storage)
+
+    comma_attempt = None
+    for sep in (',', ';', '\t'):
+        file_storage.seek(0)
+        df = pd.read_csv(file_storage, sep=sep)
+        if sep == ',':
+            comma_attempt = df
+        if _find_column(df.columns, TITLE_COLUMN_ALIASES) and _find_column(df.columns, AUTHOR_COLUMN_ALIASES):
+            return df
+    return comma_attempt
 
 
 def parse_book_file(file_storage):
     """Parse one uploaded file into a list of (title, author) pairs.
 
-    .csv/.xlsx/.xls need 'title' and 'author' columns (case-insensitive).
+    .csv/.xlsx/.xls need a title column (title/book/book title/name) and an
+    author column (author/authors/author name/writer), case-insensitive.
     .txt needs one 'Title - Author' per line.
     """
     filename = file_storage.filename
@@ -78,17 +110,19 @@ def parse_book_file(file_storage):
             pairs.append((title.strip(), author.strip()))
         return pairs
 
-    if ext == 'csv':
-        df = pd.read_csv(file_storage)
-    elif ext in ('xlsx', 'xls'):
-        df = pd.read_excel(file_storage)
-    else:
+    if ext not in ('csv', 'xlsx', 'xls'):
         raise ValueError(f"Unsupported file type: {filename}")
 
-    title_col = _find_column(df.columns, 'title')
-    author_col = _find_column(df.columns, 'author')
+    df = _read_tabular(file_storage, ext)
+    title_col = _find_column(df.columns, TITLE_COLUMN_ALIASES)
+    author_col = _find_column(df.columns, AUTHOR_COLUMN_ALIASES)
     if title_col is None or author_col is None:
-        raise ValueError(f"{filename} must have 'title' and 'author' columns")
+        found = ", ".join(str(c) for c in df.columns) or "(no columns detected)"
+        raise ValueError(
+            f"{filename}: couldn't find a title/author column. Found columns: {found}. "
+            f"Expected a title column (e.g. 'title', 'book title') and an author "
+            f"column (e.g. 'author', 'authors')."
+        )
 
     df = df.dropna(subset=[title_col])
     return [
