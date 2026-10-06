@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect
+from flask import Flask, jsonify, render_template, request, redirect
 import pandas as pd
 from utils.recommender import BookRecommender
 
@@ -7,6 +7,13 @@ app = Flask(__name__)
 book_list = []
 author_list = []
 ALLOWED_EXTENSIONS = {'txt', 'csv', 'xlsx', 'xls'}
+
+# Written by BookRecommender's on_progress callback as /recommend runs, read
+# by /recommend/progress so the homepage's loading screen can poll for live
+# status. A single global, not per-session, since this app is already
+# single-session/ephemeral (see main.py's module docstring-equivalent in
+# CLAUDE.md) - fine for one user, would clobber across concurrent users.
+recommend_progress = {}
 
 
 def allowed_file(filename):
@@ -197,12 +204,16 @@ def recommend():
         genres = request.args.get('genres', '')
         genre_keywords = [g.strip() for g in genres.split(',') if g.strip()]
 
+        recommend_progress.clear()
+
         # Create recommender and get recommendations (Class that makes recommendations)
         recommender = BookRecommender(
             books=list(zip(book_list, author_list)), force_run=True, genre_keywords=genre_keywords,
+            on_progress=recommend_progress.update,
         )
 
         recommendations = recommender.get_recommendations()
+        recommend_progress.update({"phase": "done"})
         return render_template(
             "recommend.html",
             recommendations=recommendations.to_dict(orient='records'),
@@ -211,8 +222,16 @@ def recommend():
         )
 
     except Exception as e:
+        recommend_progress.update({"phase": "done"})
         error_message = f"Error: {e}. Please enter more books."
         return render_template("error.html", message=error_message)
+
+@app.route('/recommend/progress')
+def recommend_progress_status():
+    """Polled by the homepage's loading screen while /recommend is running
+    in another request, to show live status (which book, which source) -
+    see BookRecommender's on_progress callback."""
+    return jsonify(recommend_progress)
 
 @app.route('/clear', methods=['POST'])
 def clear_all():
@@ -222,4 +241,8 @@ def clear_all():
 
 if __name__ == '__main__':
     # app.run(debug=True)
-    app.run(host='0.0.0.0', port=5001)
+    # threaded=True so /recommend/progress can actually be served while a
+    # /recommend request is still running in another thread - otherwise the
+    # dev server handles one request at a time and polling would just queue
+    # up behind the slow request instead of returning live updates.
+    app.run(host='0.0.0.0', port=5001, threaded=True)

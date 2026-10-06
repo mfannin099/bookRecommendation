@@ -121,19 +121,63 @@
         <div class="loading-content">
             <div class="spinner"></div>
             <h3>🔍 Analyzing Your Books...</h3>
-            <p style="color: #6b7280; margin-top: 8px;">
+            <p id="progressText" style="color: #6b7280; margin-top: 8px;">
                 Fetching personalized recommendations from our library
             </p>
         </div>
     </div>
 
     <script>
-        // Show loading screen when getting recommendations
+        // Show loading screen when getting recommendations, and poll
+        // /recommend/progress for live status (which book/candidate, which
+        // source) while the request runs - see BookRecommender's
+        // on_progress callback in utils/recommender.py.
         const recommendForm = document.querySelector('form[action="/recommend"]');
-        
+        const progressText = document.getElementById('progressText');
+
+        const SOURCE_LABELS = {open_library: 'Open Library', wikipedia: 'Wikipedia', itunes: 'iTunes'};
+
+        function describeProgress(p) {
+            if (!p || !p.phase) {
+                return 'Starting...';
+            }
+            const found = p.source ? SOURCE_LABELS[p.source] || p.source : null;
+            if (p.phase === 'reading_library') {
+                let msg = `Checking your books: ${p.completed} of ${p.total}`;
+                if (p.title) {
+                    msg += ` — "${p.title}" (${found ? 'found via ' + found : 'not found'})`;
+                }
+                return msg;
+            }
+            if (p.phase === 'searching_open_library') {
+                return 'Searching Open Library for similar books...';
+            }
+            if (p.phase === 'checking_candidates') {
+                let msg = `Checking possible recommendations: ${p.completed} of ${p.total}`;
+                if (p.title) {
+                    msg += ` — "${p.title}" (${found ? 'found via ' + found : 'not found'})`;
+                }
+                return msg;
+            }
+            if (p.phase === 'ranking') {
+                return 'Ranking your recommendations...';
+            }
+            if (p.phase === 'done') {
+                return 'Finishing up...';
+            }
+            return 'Working...';
+        }
+
         if (recommendForm) {
             recommendForm.addEventListener('submit', function(e) {
                 document.getElementById('loadingOverlay').classList.add('active');
+                progressText.textContent = 'Starting...';
+                setInterval(function() {
+                    fetch('/recommend/progress')
+                        .then(function(r) { return r.json(); })
+                        .then(function(p) { progressText.textContent = describeProgress(p); })
+                        .catch(function() {});
+                }, 1000);
             });
         }
     </script>

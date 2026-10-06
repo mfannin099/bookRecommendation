@@ -39,8 +39,14 @@ class BookRecommender:
     def __init__(self, books, cache_path="library.parquet",
                  force_run=False, terms_in_search_query=3, candidate_pool_size=40,
                  already_read_match_score=85, top_n=10, max_workers=5,
-                 min_similarity=0.05, genre_keywords=None, genre_boost_repeats=5):
+                 min_similarity=0.05, genre_keywords=None, genre_boost_repeats=5,
+                 on_progress=None):
         """books: list of (title, author) tuples for the books already read.
+
+        on_progress, if given, is called with a dict at each meaningful step
+        (a book/candidate finishing its metadata lookup, or a phase
+        starting) so a caller can surface live progress - see _report and
+        get_recommendations.
 
         max_workers caps how many metadata fetches run concurrently. Each
         fetch is I/O-bound (mostly waiting on the network), so this is cheap
@@ -74,15 +80,22 @@ class BookRecommender:
         self.min_similarity = min_similarity
         self.genre_keywords = [g.strip().lower() for g in (genre_keywords or []) if g.strip()]
         self.genre_boost_repeats = genre_boost_repeats
+        self.on_progress = on_progress
 
         self.client = MetadataClient()
         self.library_df = None
+
+    def _report(self, phase, **details):
+        if self.on_progress:
+            self.on_progress({"phase": phase, **details})
 
     def build_library(self):
         """Fetch metadata for every read book via Open Library / Wikipedia,
         up to max_workers at a time since each lookup is independent and
         I/O-bound."""
         rows = []
+        total = len(self.titles_list)
+        completed = 0
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures = {}
             for title, author in zip(self.titles_list, self.authors_list):
@@ -93,6 +106,9 @@ class BookRecommender:
             for future in as_completed(futures):
                 title, author = futures[future]
                 result = future.result()
+                completed += 1
+                self._report("reading_library", completed=completed, total=total,
+                             title=title, source=(result.get("source") if result else None))
                 if result is None:
                     print(f"  no metadata found for '{title}'")
                     continue
@@ -182,6 +198,8 @@ class BookRecommender:
         """Fetch descriptions for candidate books, up to max_workers at a
         time since each lookup is independent and I/O-bound."""
         enriched = []
+        total = len(candidates)
+        completed = 0
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures = {executor.submit(self.client.fetch, c["title"], c["author"]): c
                        for c in candidates}
@@ -189,6 +207,9 @@ class BookRecommender:
             for future in as_completed(futures):
                 c = futures[future]
                 result = future.result()
+                completed += 1
+                self._report("checking_candidates", completed=completed, total=total,
+                             title=c["title"], source=(result.get("source") if result else None))
                 if result is None or not result.get("description"):
                     continue
                 enriched.append({
@@ -230,6 +251,7 @@ class BookRecommender:
 
     def get_recommendations(self):
         """Main method to run the complete recommendation pipeline."""
+        self._report("reading_library", completed=0, total=len(self.titles_list), title=None, source=None)
         self.load_or_build_library()
         profile_df = self.clean_library()
 
@@ -248,10 +270,13 @@ class BookRecommender:
         vectorizer.fit(profile_df["clean_description"])
 
         search_query = self.build_search_query(vectorizer, profile_df)
+        self._report("searching_open_library", query=search_query)
         candidates = self.fetch_candidates(search_query)
+        self._report("checking_candidates", completed=0, total=len(candidates), title=None, source=None)
         enriched = self.enrich_candidates(candidates)
 
         if not enriched:
             raise ValueError("No candidate books with descriptions were found.")
 
+        self._report("ranking")
         return self.rank_candidates(vectorizer, profile_df, enriched)
