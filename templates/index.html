@@ -47,6 +47,7 @@
                 <legend><strong>Upload Files:</strong></legend>
                 <label for="files">Book list file(s) (.csv, .xlsx, or .txt):</label><br>
                 <input type="file" id="files" name="files" accept=".csv,.xlsx,.xls,.txt" multiple required><br>
+                <p id="fileSelectedHint" style="font-size: 0.9em; color: #166534; font-weight: 500; margin-top: 8px; display: none;"></p>
                 <p style="font-size: 0.85em; color: #6b7280;">
                     .csv/.xlsx need a title column (<code>title</code>, <code>book</code>,
                     <code>book title</code>, or <code>name</code>) and an author column
@@ -128,6 +129,28 @@
     </div>
 
     <script>
+        // Selecting file(s) in the file picker doesn't upload anything by
+        // itself - the form still needs to be submitted. Make that
+        // explicit instead of leaving the page looking unchanged after
+        // the picker closes.
+        const filesInput = document.getElementById('files');
+        const fileSelectedHint = document.getElementById('fileSelectedHint');
+
+        if (filesInput && fileSelectedHint) {
+            filesInput.addEventListener('change', function() {
+                if (filesInput.files.length === 0) {
+                    fileSelectedHint.style.display = 'none';
+                    return;
+                }
+                const names = Array.from(filesInput.files).map(function(f) { return f.name; }).join(', ');
+                const count = filesInput.files.length;
+                fileSelectedHint.textContent =
+                    `✅ ${count} file${count !== 1 ? 's' : ''} selected (${names}) — ` +
+                    `click "Upload Files" below to add ${count !== 1 ? 'them' : 'it'}.`;
+                fileSelectedHint.style.display = 'block';
+            });
+        }
+
         // Show loading screen when getting recommendations, and poll
         // /recommend/progress for live status (which book/candidate, which
         // source) while the request runs - see BookRecommender's
