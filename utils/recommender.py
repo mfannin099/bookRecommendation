@@ -11,11 +11,23 @@ import string
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
-from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS, TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from thefuzz import fuzz
 
 from utils.metadata_client import MetadataClient, search_open_library_candidates
+
+# Generic book-marketing/citation boilerplate that isn't in sklearn's
+# standard English stopword list but is common enough across book
+# descriptions (especially the iTunes fallback's promotional copy, e.g.
+# "...New York Times bestselling author...") to dominate the TF-IDF sum used
+# to build the Open Library search query - without these, the query can end
+# up being pure noise like "book new times" instead of anything topical.
+BOOK_BOILERPLATE_STOPWORDS = [
+    "new", "book", "books", "author", "authors", "times", "york", "press",
+    "bestselling", "bestseller",
+]
+STOP_WORDS = list(ENGLISH_STOP_WORDS) + BOOK_BOILERPLATE_STOPWORDS
 
 
 def strip_punctuation(text):
@@ -232,7 +244,7 @@ class BookRecommender:
                 "No metadata could be found for any of your books - can't build recommendations."
             )
 
-        vectorizer = TfidfVectorizer(stop_words="english")
+        vectorizer = TfidfVectorizer(stop_words=STOP_WORDS)
         vectorizer.fit(profile_df["clean_description"])
 
         search_query = self.build_search_query(vectorizer, profile_df)
