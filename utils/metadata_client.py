@@ -17,6 +17,7 @@ from thefuzz import fuzz
 
 OPEN_LIBRARY_SEARCH_URL = "https://openlibrary.org/search.json"
 OPEN_LIBRARY_WORK_URL = "https://openlibrary.org{key}.json"
+OPEN_LIBRARY_SUBJECT_URL = "https://openlibrary.org/subjects/{slug}.json"
 WIKIPEDIA_SEARCH_URL = "https://en.wikipedia.org/w/api.php"
 WIKIPEDIA_SUMMARY_URL = "https://en.wikipedia.org/api/rest_v1/page/summary/{title}"
 ITUNES_SEARCH_URL = "https://itunes.apple.com/search"
@@ -229,6 +230,34 @@ def search_open_library_candidates(query, limit=40):
         {"title": d.get("title"), "author": ", ".join(d.get("author_name", []) or [])}
         for d in docs
         if d.get("title")
+    ]
+
+
+def search_open_library_subject_candidates(subject, limit=10, sort="rating"):
+    """Search Open Library's subject-browse endpoint for candidates tagged
+    with a given subject (e.g. "Leadership"), sorted by its own popularity
+    signal (sort="rating" surfaces well-known books like *How to Win Friends
+    and Influence People* rather than obscure, barely-cataloged ones) --
+    unlike search_open_library_candidates's keyword text search, which has
+    no popularity signal at all."""
+    slug = quote(re.sub(r"\s+", "_", subject.strip().lower()))
+    try:
+        resp = _SESSION.get(
+            OPEN_LIBRARY_SUBJECT_URL.format(slug=slug),
+            params={"limit": limit, "sort": sort},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        works = resp.json().get("works", [])
+    except Exception as e:
+        print(f"Open Library subject search failed for '{subject}': {e}")
+        works = []
+
+    return [
+        {"title": w.get("title"),
+         "author": ", ".join(a.get("name") for a in (w.get("authors") or []) if a.get("name"))}
+        for w in works
+        if w.get("title")
     ]
 
 

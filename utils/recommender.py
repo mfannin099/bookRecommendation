@@ -8,6 +8,7 @@ similarity against the read-books profile.
 import os
 import re
 import string
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
@@ -15,7 +16,11 @@ from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS, TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from thefuzz import fuzz
 
-from utils.metadata_client import MetadataClient, search_open_library_candidates
+from utils.metadata_client import (
+    MetadataClient,
+    search_open_library_candidates,
+    search_open_library_subject_candidates,
+)
 
 # Generic book-marketing/citation boilerplate that isn't in sklearn's
 # standard English stopword list but is common enough across book
@@ -29,9 +34,26 @@ BOOK_BOILERPLATE_STOPWORDS = [
 ]
 STOP_WORDS = list(ENGLISH_STOP_WORDS) + BOOK_BOILERPLATE_STOPWORDS
 
+# Open Library's crowdsourced subject tags mix in call numbers
+# ("Bf637.s8 c37 1998"), foreign-language duplicates ("Succès", "Bedrijven"),
+# and other noise alongside usable tags like "Leadership" - this keeps only
+# tags that look like a plain English phrase.
+_USABLE_SUBJECT_RE = re.compile(r"^[A-Za-z][A-Za-z \-']{2,40}$")
+
+# Marketing tags like "New York Times bestseller"/"USA Today bestseller"
+# pass the pattern above (they're plain English phrases) but aren't a real
+# subject/genre - same kind of boilerplate noise as BOOK_BOILERPLATE_STOPWORDS,
+# just checked as a substring here since banning the individual words would
+# also reject genuine subjects like "New business enterprises".
+_BOILERPLATE_SUBJECT_RE = re.compile(r"bestsell", re.IGNORECASE)
+
 
 def strip_punctuation(text):
     return re.sub(f"[{re.escape(string.punctuation)}]", "", str(text))
+
+
+def _is_usable_subject(subject):
+    return bool(_USABLE_SUBJECT_RE.match(subject)) and not _BOILERPLATE_SUBJECT_RE.search(subject)
 
 
 class BookRecommender:
@@ -40,8 +62,19 @@ class BookRecommender:
                  force_run=False, terms_in_search_query=3, candidate_pool_size=40,
                  already_read_match_score=85, top_n=10, max_workers=5,
                  min_similarity=0.05, genre_keywords=None, genre_boost_repeats=5,
-                 on_progress=None):
+                 on_progress=None, subject_count=3, subject_candidate_limit=10):
         """books: list of (title, author) tuples for the books already read.
+
+        subject_count/subject_candidate_limit control the second candidate
+        source (fetch_subject_candidates): the subject_count most common
+        subject tags across your matched books (e.g. "Leadership",
+        "Golf" - from categories/subjects data every source already
+        returns but nothing previously used) are each searched via Open
+        Library's popularity-ranked subject-browse endpoint, up to
+        subject_candidate_limit results apiece. Kept modest (3 x 10 = 30
+        raw, before dedup) so this doesn't double the keyword search's
+        existing candidate_pool_size=40 and proportionally double
+        /recommend's runtime.
 
         on_progress, if given, is called with a dict at each meaningful step
         (a book/candidate finishing its metadata lookup, or a phase
@@ -81,6 +114,8 @@ class BookRecommender:
         self.genre_keywords = [g.strip().lower() for g in (genre_keywords or []) if g.strip()]
         self.genre_boost_repeats = genre_boost_repeats
         self.on_progress = on_progress
+        self.subject_count = subject_count
+        self.subject_candidate_limit = subject_candidate_limit
 
         self.client = MetadataClient()
         self.library_df = None
@@ -194,6 +229,66 @@ class BookRecommender:
             kept_titles.append(title)
         return filtered
 
+    def top_subjects(self, profile_df):
+        """Count usable subject/category tags (see _is_usable_subject)
+        across every matched book's categories column, and return the
+        subject_count most common - these feed fetch_subject_candidates as
+        a second, popularity-ranked candidate source."""
+        counts = Counter()
+        for categories in profile_df["categories"]:
+            # categories is a plain list fresh from build_library(), but a
+            # numpy array once round-tripped through the library.parquet
+            # cache (force_run=False) - `if not categories` is ambiguous
+            # for a multi-element array, so check length explicitly.
+            if categories is None or len(categories) == 0:
+                continue
+            for subject in categories:
+                subject = subject.strip()
+                if _is_usable_subject(subject):
+                    counts[subject] += 1
+        return [subject for subject, _count in counts.most_common(self.subject_count)]
+
+    def fetch_subject_candidates(self, subjects):
+        """Discover candidates via Open Library's subject-browse endpoint
+        (search_open_library_subject_candidates), one call per subject,
+        excluding already-read titles - same filtering as fetch_candidates,
+        kept separate since this method's raw candidates come from a
+        different source (per-subject, not a single keyword query)."""
+        already_read = set(self.titles_list)
+        filtered = []
+        kept_titles = []
+        for subject in subjects:
+            candidates = search_open_library_subject_candidates(
+                subject, limit=self.subject_candidate_limit
+            )
+            for c in candidates:
+                title = c["title"]
+                if any(fuzz.partial_ratio(title.lower(), read.lower()) >= self.already_read_match_score
+                       for read in already_read):
+                    continue
+                if any(fuzz.ratio(title.lower(), kept.lower()) >= self.already_read_match_score
+                       for kept in kept_titles):
+                    continue
+                filtered.append(c)
+                kept_titles.append(title)
+        return filtered
+
+    def _merge_candidates(self, *candidate_lists):
+        """Combine candidate lists from different sources (keyword search,
+        subject search), dropping anything fuzzy-matching a candidate
+        already kept - the same work can surface from both sources."""
+        merged = []
+        kept_titles = []
+        for candidates in candidate_lists:
+            for c in candidates:
+                title = c["title"]
+                if any(fuzz.ratio(title.lower(), kept.lower()) >= self.already_read_match_score
+                       for kept in kept_titles):
+                    continue
+                merged.append(c)
+                kept_titles.append(title)
+        return merged
+
     def enrich_candidates(self, candidates):
         """Fetch descriptions for candidate books, up to max_workers at a
         time since each lookup is independent and I/O-bound."""
@@ -270,8 +365,11 @@ class BookRecommender:
         vectorizer.fit(profile_df["clean_description"])
 
         search_query = self.build_search_query(vectorizer, profile_df)
-        self._report("searching_open_library", query=search_query)
-        candidates = self.fetch_candidates(search_query)
+        subjects = self.top_subjects(profile_df)
+        self._report("searching_open_library", query=search_query, subjects=subjects)
+        keyword_candidates = self.fetch_candidates(search_query)
+        subject_candidates = self.fetch_subject_candidates(subjects) if subjects else []
+        candidates = self._merge_candidates(keyword_candidates, subject_candidates)
         self._report("checking_candidates", completed=0, total=len(candidates), title=None, source=None)
         enriched = self.enrich_candidates(candidates)
 
