@@ -28,9 +28,32 @@ from utils.metadata_client import (
 # "...New York Times bestselling author...") to dominate the TF-IDF sum used
 # to build the Open Library search query - without these, the query can end
 # up being pure noise like "book new times" instead of anything topical.
+# The second group is subtler: marketing superlatives that sound topical
+# but are plastered on blurbs for any genre - confirmed live when a
+# business-reading profile's "visionary" (real, from Steve Jobs/Elon Musk
+# bios) matched a William Gibson sci-fi novel whose blurb separately calls
+# Gibson "one of the most visionary... writers".
+#
+# "sector"/"sectors" is a different flavor of the same problem, found while
+# verifying the fix above: removing "visionary" let it fill the freed query
+# slot, which pulled in a cluster of unrelated healthcare-sector books that
+# scored even higher than the original false positive (confirmed: they have
+# real category data, just entirely healthcare-tagged - the category-overlap
+# boost in rank_candidates correctly contributed nothing, since it can only
+# boost real overlaps, not suppress an inflated score from generic shared
+# vocabulary). This is a real pattern worth knowing about, not just a
+# one-off: removing a contaminating term from this list can let a different,
+# equally generic term take its place. Each case has been verified to
+# produce a clean result for the profiles tested so far, but this list isn't
+# a permanent fix for every future case - see rank_candidates' category-
+# overlap boost and CLAUDE.md for the broader context.
 BOOK_BOILERPLATE_STOPWORDS = [
     "new", "book", "books", "author", "authors", "times", "york", "press",
     "bestselling", "bestseller",
+    "visionary", "groundbreaking", "compelling", "inspiring", "masterful",
+    "brilliant", "riveting", "extraordinary", "unforgettable", "captivating",
+    "acclaimed",
+    "sector", "sectors",
 ]
 STOP_WORDS = list(ENGLISH_STOP_WORDS) + BOOK_BOILERPLATE_STOPWORDS
 
@@ -312,11 +335,29 @@ class BookRecommender:
                     "author": c["author"],
                     "description": result["description"],
                     "subtitle": result.get("subtitle"),
+                    "categories": result.get("categories"),
                 })
         return enriched
 
-    def rank_candidates(self, vectorizer, profile_df, candidates):
+    def _subject_overlap(self, categories, subjects):
+        """How many of a candidate's categories case-insensitively match
+        the profile's top_subjects - used by rank_candidates as a light
+        secondary signal on top of pure text similarity."""
+        if not categories or not subjects:
+            return 0
+        subject_set = {s.lower() for s in subjects}
+        return sum(1 for c in categories if isinstance(c, str) and c.strip().lower() in subject_set)
+
+    def rank_candidates(self, vectorizer, profile_df, candidates, subjects=None):
         """Rank candidates by cosine similarity against the read-books profile.
+
+        A candidate whose own categories overlap the profile's subjects
+        (top_subjects) gets a modest similarity boost - a light touch
+        (15% per matching category), nudging rather than overriding the
+        text-similarity signal, in the same spirit as genre_boost_repeats.
+        This doesn't catch every surface-vocabulary false positive (some
+        candidates have no category data at all to compare), but helps for
+        ones that do.
 
         Candidates below min_similarity are dropped rather than padding the
         result out to top_n regardless of match quality - a weak keyword
@@ -330,6 +371,9 @@ class BookRecommender:
 
         candidate_vectors = vectorizer.transform(candidates_df["clean_description"])
         candidates_df["similarity"] = cosine_similarity(candidate_vectors, profile_vector).flatten()
+
+        overlap = candidates_df["categories"].apply(lambda cats: self._subject_overlap(cats, subjects))
+        candidates_df["similarity"] = candidates_df["similarity"] * (1 + 0.15 * overlap)
 
         candidates_df = candidates_df[candidates_df["similarity"] >= self.min_similarity]
         if candidates_df.empty:
@@ -377,4 +421,4 @@ class BookRecommender:
             raise ValueError("No candidate books with descriptions were found.")
 
         self._report("ranking")
-        return self.rank_candidates(vectorizer, profile_df, enriched)
+        return self.rank_candidates(vectorizer, profile_df, enriched, subjects)
