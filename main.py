@@ -180,7 +180,13 @@ def delete_entry():
 
 @app.route('/edit', methods=['GET', 'POST'])
 def edit_entry():
-    index = int(request.values.get('index'))
+    try:
+        index = int(request.values.get('index'))
+    except (TypeError, ValueError):
+        return render_template('error.html', message="Invalid book entry index.")
+
+    if not (0 <= index < len(book_list)):
+        return render_template('error.html', message="That book entry no longer exists.")
 
     if request.method == 'POST':
         book_list[index] = request.form['book']
