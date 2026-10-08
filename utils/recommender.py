@@ -339,14 +339,28 @@ class BookRecommender:
                 })
         return enriched
 
-    def _subject_overlap(self, categories, subjects):
-        """How many of a candidate's categories case-insensitively match
-        the profile's top_subjects - used by rank_candidates as a light
-        secondary signal on top of pure text similarity."""
+    def _matched_subjects(self, categories, subjects):
+        """Which of a candidate's categories case-insensitively match the
+        profile's top_subjects (case preserved from `subjects`) - used by
+        rank_candidates both as a light secondary ranking signal (its
+        count) and, surfaced to the user, as part of "why was this
+        recommended"."""
         if not categories or not subjects:
-            return 0
-        subject_set = {s.lower() for s in subjects}
-        return sum(1 for c in categories if isinstance(c, str) and c.strip().lower() in subject_set)
+            return []
+        subject_lookup = {s.lower(): s for s in subjects}
+        matched = []
+        for c in categories:
+            if isinstance(c, str) and c.strip().lower() in subject_lookup:
+                matched.append(subject_lookup[c.strip().lower()])
+        return matched
+
+    def _top_matched_terms(self, feature_names, contributions, limit=4):
+        """The feature names with the largest positive contribution to a
+        candidate's cosine similarity against the profile centroid - i.e.
+        which shared vocabulary actually drove the match, used to show
+        "why was this recommended" alongside matched_subjects."""
+        top_indices = contributions.argsort()[::-1][:limit]
+        return [feature_names[i] for i in top_indices if contributions[i] > 0]
 
     def rank_candidates(self, vectorizer, profile_df, candidates, subjects=None):
         """Rank candidates by cosine similarity against the read-books profile.
@@ -362,7 +376,12 @@ class BookRecommender:
         Candidates below min_similarity are dropped rather than padding the
         result out to top_n regardless of match quality - a weak keyword
         match (e.g. a candidate that only shares one generic word with the
-        profile) is worse than returning fewer, more confident picks."""
+        profile) is worse than returning fewer, more confident picks.
+
+        Also computes matched_terms/matched_subjects per surviving
+        candidate - the shared TF-IDF vocabulary and shared categories that
+        actually drove its score, surfaced on the recommendations page so
+        a pick isn't just a bare, unexplained similarity number."""
         candidates_df = pd.DataFrame(candidates)
         candidates_df["clean_description"] = candidates_df["description"].apply(strip_punctuation)
 
@@ -372,8 +391,20 @@ class BookRecommender:
         candidate_vectors = vectorizer.transform(candidates_df["clean_description"])
         candidates_df["similarity"] = cosine_similarity(candidate_vectors, profile_vector).flatten()
 
-        overlap = candidates_df["categories"].apply(lambda cats: self._subject_overlap(cats, subjects))
-        candidates_df["similarity"] = candidates_df["similarity"] * (1 + 0.15 * overlap)
+        # Elementwise product of each candidate's vector with the profile
+        # centroid gives each term's contribution to that candidate's raw
+        # cosine similarity - the same vectors already driving the score
+        # above, just inspected per-term instead of summed.
+        feature_names = vectorizer.get_feature_names_out()
+        contributions = candidate_vectors.toarray() * profile_vector.flatten()
+        candidates_df["matched_terms"] = [
+            self._top_matched_terms(feature_names, contributions[i])
+            for i in range(contributions.shape[0])
+        ]
+
+        matched_subjects = candidates_df["categories"].apply(lambda cats: self._matched_subjects(cats, subjects))
+        candidates_df["matched_subjects"] = matched_subjects
+        candidates_df["similarity"] = candidates_df["similarity"] * (1 + 0.15 * matched_subjects.apply(len))
 
         candidates_df = candidates_df[candidates_df["similarity"] >= self.min_similarity]
         if candidates_df.empty:
@@ -386,7 +417,10 @@ class BookRecommender:
         candidates_df["description"] = candidates_df["description"].apply(
             lambda d: d if len(d) <= 240 else d[:240].rsplit(" ", 1)[0] + "..."
         )
-        return candidates_df[["title", "subtitle", "authors", "description", "similarity"]].head(self.top_n)
+        return candidates_df[[
+            "title", "subtitle", "authors", "description", "similarity",
+            "matched_terms", "matched_subjects",
+        ]].head(self.top_n)
 
     def get_recommendations(self):
         """Main method to run the complete recommendation pipeline."""

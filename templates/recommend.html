@@ -27,6 +27,13 @@
                     {% if book.description %}
                         <p style="color: #6b7280; font-size: 0.9em; margin: 6px 0 0;">{{ book.description }}</p>
                     {% endif %}
+                    {% if book.matched_terms or book.matched_subjects %}
+                        <p style="color: #9ca3af; font-size: 0.8em; margin: 6px 0 0;">
+                            Why this was recommended:
+                            {% if book.matched_terms %}matched on {{ book.matched_terms|join(', ') }}{% endif %}
+                            {% if book.matched_subjects %}{% if book.matched_terms %} · {% endif %}shared categor{{ 'y' if book.matched_subjects|length == 1 else 'ies' }}: {{ book.matched_subjects|join(', ') }}{% endif %}
+                        </p>
+                    {% endif %}
                 </div>
             </li>
             {% endfor %}
