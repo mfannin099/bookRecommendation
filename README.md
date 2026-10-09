@@ -134,7 +134,7 @@ workflow*, with an optional `n`). Each run:
 
 1. installs dependencies and runs the tests,
 2. runs the sync with the default genres (`data,business`),
-3. runs it again with `psychology,self-help`,
+3. runs it again with `motivation,productivity`,
 4. commits both CSVs to the **`results`** branch under `recommendations/`
    (the branch is created on the first run; `master` is never touched).
 

@@ -1,7 +1,7 @@
 name: Weekly book recommendations
 
 # Every Saturday morning, pull the most recent books from the Google Sheet and
-# write two recommendation CSVs (default genres, then psychology/self-help) to
+# write two recommendation CSVs (default genres, then motivation/productivity) to
 # the `results` branch. See "Weekly automation" in README.md.
 
 on:
@@ -54,9 +54,9 @@ jobs:
         run: uv run python scripts/sync_from_sheet.py --n "$N"
 
       # !cancelled() so the second list is still attempted if the first failed.
-      - name: Recommendations (psychology, self-help)
+      - name: Recommendations (motivation, productivity)
         if: ${{ !cancelled() }}
-        run: uv run python scripts/sync_from_sheet.py --n "$N" --genres "psychology,self-help"
+        run: uv run python scripts/sync_from_sheet.py --n "$N" --genres "motivation,productivity"
 
       - name: Publish CSVs to the results branch
         if: ${{ !cancelled() }}
