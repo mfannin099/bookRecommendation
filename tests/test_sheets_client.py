@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from sync_from_sheet import output_path  # noqa: E402
+from utils.book_columns import first_author  # noqa: E402
 from utils.book_dates import parse_date  # noqa: E402
 from utils.sheets_client import MAX_BOOKS, SheetSyncError, recent_tracked_books, validate_n  # noqa: E402
 
@@ -122,3 +123,23 @@ def test_output_path_with_genres():
 def test_output_path_without_genres_and_unsafe_characters():
     assert output_path([], date(2026, 10, 9)).name == "matt_book_recommendations_2026-10-09.csv"
     assert output_path(["Sci-Fi / Space!"], date(2026, 10, 9)).name.endswith("_sci-fi-space.csv")
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("Jocko Willink and Leif Babin", "Jocko Willink"),
+        ("Benoit Mandelbrot & Richard Hudson", "Benoit Mandelbrot"),
+        ("Steve Phillips, Ryan Barry, Stephan Gans, and Kate Schardt", "Steve Phillips"),
+        ("T.J Tomasi and Mike Adams", "T.J Tomasi"),
+        ("A. One; B. Two", "A. One"),
+        ("Alexander McCall Smith", "Alexander McCall Smith"),  # "and" inside a name is not a separator
+        ("Brandon Sanderson", "Brandon Sanderson"),
+        ("  Dan Heath  ", "Dan Heath"),
+        ("Many Authors", "Many Authors"),
+        ("", ""),
+        (None, ""),
+    ],
+)
+def test_first_author(raw, expected):
+    assert first_author(raw) == expected

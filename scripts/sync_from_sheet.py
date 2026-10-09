@@ -24,6 +24,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from utils.book_columns import first_author
 from utils.recommender import BookRecommender
 from utils.sheets_client import (
     DEFAULT_BOOKS,
@@ -84,7 +85,8 @@ def main() -> int:
 
     genre_keywords = [g.strip() for g in args.genres.split(",") if g.strip()]
     recommender = BookRecommender(
-        books=list(zip(books["title"], books["author"])),
+        # Co-authored books: look up by the first author only (see first_author).
+        books=[(title, first_author(author)) for title, author in zip(books["title"], books["author"])],
         force_run=True,
         genre_keywords=genre_keywords,
     )
