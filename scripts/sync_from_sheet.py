@@ -8,7 +8,7 @@ copy); that directory is gitignored.
 Usage:
     uv run python scripts/sync_from_sheet.py --dry-run     # just list the books
     uv run python scripts/sync_from_sheet.py
-    uv run python scripts/sync_from_sheet.py --n 10 --genres golf,business
+    uv run python scripts/sync_from_sheet.py --n 30 --genres golf,business
 """
 import argparse
 import sys
@@ -21,14 +21,23 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from utils.recommender import BookRecommender
-from utils.sheets_client import SheetSyncError, fetch_sheet, recent_tracked_books
+from utils.sheets_client import (
+    DEFAULT_BOOKS,
+    MAX_BOOKS,
+    SheetSyncError,
+    fetch_sheet,
+    recent_tracked_books,
+)
 
 OUTPUT_DIR = ROOT / "data" / "recommendations"
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--n", type=int, default=20, help="how many recent books to use (default 20)")
+    parser.add_argument(
+        "--n", type=int, default=DEFAULT_BOOKS, choices=range(1, MAX_BOOKS + 1), metavar=f"1-{MAX_BOOKS}",
+        help=f"how many recent books to look back (default {DEFAULT_BOOKS}, max {MAX_BOOKS})",
+    )
     parser.add_argument("--genres", default="", help="comma-separated genre keywords to steer results")
     parser.add_argument("--dry-run", action="store_true", help="list the books and stop; no recommendations")
     args = parser.parse_args()

@@ -36,6 +36,8 @@ SHEET_ID_ENV = "GOOGLE_SHEET_ID"
 SHEET_GID_ENV = "GOOGLE_SHEET_GID"  # optional; defaults to the first tab
 EXPORT_URL = "https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
 REQUEST_TIMEOUT = 30
+DEFAULT_BOOKS = 20
+MAX_BOOKS = 50  # each book costs live metadata lookups, so cap the look-back
 
 
 class SheetSyncError(Exception):
@@ -81,7 +83,7 @@ def _tidy(value) -> str:
     return " ".join(str(value).split()) if pd.notna(value) else ""
 
 
-def recent_tracked_books(df: pd.DataFrame, n: int = 20) -> pd.DataFrame:
+def recent_tracked_books(df: pd.DataFrame, n: int = DEFAULT_BOOKS) -> pd.DataFrame:
     """Return the `n` most recent tracked books as a DataFrame with columns
     title, author, end_date (NaT if no end date logged yet), oldest first.
 
@@ -89,6 +91,8 @@ def recent_tracked_books(df: pd.DataFrame, n: int = 20) -> pd.DataFrame:
     or author are skipped (a lookup without an author is unreliable);
     duplicate title+author pairs keep their last occurrence.
     """
+    if not 1 <= n <= MAX_BOOKS:
+        raise SheetSyncError(f"n must be between 1 and {MAX_BOOKS} (got {n}).")
     title_col = find_column(df.columns, TITLE_COLUMN_ALIASES)
     author_col = find_column(df.columns, AUTHOR_COLUMN_ALIASES)
     if title_col is None or author_col is None or "end_date" not in df.columns:
@@ -112,7 +116,7 @@ def recent_tracked_books(df: pd.DataFrame, n: int = 20) -> pd.DataFrame:
     return books.tail(n).reset_index(drop=True)
 
 
-def fetch_recent_books(n: int = 20) -> list[tuple[str, str]]:
+def fetch_recent_books(n: int = DEFAULT_BOOKS) -> list[tuple[str, str]]:
     """(title, author) pairs for the `n` most recent tracked books."""
     books = recent_tracked_books(fetch_sheet(), n)
     return list(zip(books["title"], books["author"]))
