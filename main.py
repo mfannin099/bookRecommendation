@@ -1,5 +1,11 @@
 from flask import Flask, jsonify, render_template, request, redirect
 import pandas as pd
+from utils.book_columns import (
+    AUTHOR_COLUMN_ALIASES,
+    TITLE_COLUMN_ALIASES,
+    dedupe_key as _dedupe_key,
+    find_column as _find_column,
+)
 from utils.recommender import BookRecommender
 
 app = Flask(__name__)
@@ -18,10 +24,6 @@ recommend_progress = {}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-
-def _dedupe_key(title, author):
-    return (title.strip().lower(), author.strip().lower())
 
 
 @app.route('/', methods=["GET", 'POST'])
@@ -51,19 +53,6 @@ def homepage():
         added=added, skipped=skipped,
         book_list=book_list, author_list=author_list,
     )
-
-# Real export tools vary their column naming (StoryGraph uses "Authors"
-# plural, LibraryThing often uses "Primary Author", etc.), so match against
-# a set of common aliases rather than requiring the exact words.
-TITLE_COLUMN_ALIASES = {"title", "book", "book title", "name"}
-AUTHOR_COLUMN_ALIASES = {"author", "authors", "author name", "writer"}
-
-
-def _find_column(columns, aliases):
-    for col in columns:
-        if col.strip().lower() in aliases:
-            return col
-    return None
 
 
 def _read_tabular(file_storage, ext):
