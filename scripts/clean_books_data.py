@@ -1,4 +1,4 @@
-"""Clean and standardize the raw book-tracker CSV in data/ for downstream use.
+"""Clean and standardize data/recent_20_books.csv (rewritten in place).
 
 Handles: blank -> NaN normalization, duplicate rows, inconsistent author
 separators ("and" / "&"), inconsistent genre delimiters/casing, messy
@@ -19,9 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from utils.book_dates import parse_date
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
-RAW_PATH = DATA_DIR / "Book Tracker - Sheet1.csv"
-CLEAN_CSV_PATH = DATA_DIR / "books_clean.csv"
-CLEAN_PARQUET_PATH = DATA_DIR / "books_clean.parquet"
+BOOKS_PATH = DATA_DIR / "recent_20_books.csv"
 
 def clean_genres(raw) -> str | float:
     if pd.isna(raw):
@@ -33,6 +31,14 @@ def clean_genres(raw) -> str | float:
 def clean_books(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df.columns = [c.strip().lower().replace(" ", "_") for c in df.columns]
+
+    # An already-cleaned file keeps the original date text in *_date_raw and
+    # parsed Timestamps in *_date; re-clean from the raw text so the script is
+    # idempotent (cleaning cleaned output changes nothing).
+    for col in ("start_date", "end_date"):
+        if f"{col}_raw" in df.columns:
+            df[col] = df[f"{col}_raw"]
+    df = df.drop(columns=[c for c in ("start_date_raw", "end_date_raw") if c in df.columns])
 
     text_cols = ["title", "author", "genre", "start_date", "end_date"]
     for col in text_cols:
@@ -65,7 +71,7 @@ def clean_books(df: pd.DataFrame) -> pd.DataFrame:
 
     df["year"] = pd.to_numeric(df["year"], errors="coerce").astype("Int64")
     df["page_count"] = pd.to_numeric(df["page_count"], errors="coerce").astype("Int64")
-    df["audiobook"] = df["audiobook"].astype(str).str.strip().str.lower().eq("yes")
+    df["audiobook"] = df["audiobook"].astype(str).str.strip().str.lower().isin({"yes", "true"})
 
     df["start_date_raw"] = df["start_date"]
     df["end_date_raw"] = df["end_date"]
@@ -84,13 +90,12 @@ def clean_books(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def main() -> None:
-    df = pd.read_csv(RAW_PATH, encoding="utf-8-sig")
+    df = pd.read_csv(BOOKS_PATH, encoding="utf-8-sig")
     cleaned = clean_books(df)
 
-    cleaned.to_csv(CLEAN_CSV_PATH, index=False)
-    cleaned.to_parquet(CLEAN_PARQUET_PATH, index=False)
+    cleaned.to_csv(BOOKS_PATH, index=False)
 
-    print(f"Cleaned {len(cleaned)} rows (from {len(df)} raw rows) -> {CLEAN_CSV_PATH}")
+    print(f"Cleaned {len(cleaned)} rows (from {len(df)} rows) -> {BOOKS_PATH}")
 
     unparsed = (cleaned["start_date"].isna() & cleaned["start_date_raw"].notna()) | (
         cleaned["end_date"].isna() & cleaned["end_date_raw"].notna()

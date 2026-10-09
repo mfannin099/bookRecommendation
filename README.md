@@ -43,7 +43,7 @@ What you'll see:
    - `.csv` / `.xlsx` with a title column (`title`, `book`, `book title`, or
      `name`) and an author column (`author`, `authors`, `author name`, or
      `writer`) — case-insensitive, and comma-, semicolon-, or tab-separated
-     `.csv` all work. The same shape as `data/books_clean.csv`, so you can
+     `.csv` all work. The same shape as `data/recent_20_books.csv`, so you can
      upload that file directly. If the columns can't be found, the error
      message shows exactly what columns were detected so you can fix the file.
    - `.txt` with one `Title - Author` per line. If your title itself contains
@@ -89,8 +89,8 @@ the project root:
 | Script | What it's for | Command |
 |---|---|---|
 | `quick_start.py` | Run the recommendation pipeline against a couple of hardcoded books (`BOOKS` list at the top of the file — edit it to try your own), no Flask/browser needed. Good for checking the pipeline still works end to end. | `uv run python quick_start.py` |
-| `scripts/clean_books_data.py` | Turn your raw reading-log export (`data/Book Tracker - Sheet1.csv`) into the cleaned `data/books_clean.csv` / `.parquet` — dedupes rows, standardizes dates/genres. Run this after editing the raw sheet. | `uv run python scripts/clean_books_data.py` |
-| `scripts/test_metadata_coverage.py` | Reports what fraction of your real reading history gets a usable description from Open Library vs. Wikipedia vs. iTunes vs. none. Useful after changing `utils/metadata_client.py` or the source data, to see whether coverage got better or worse. | `uv run python scripts/test_metadata_coverage.py` |
+| `scripts/clean_books_data.py` | Re-clean `data/recent_20_books.csv` in place — dedupes rows, standardizes authors/genres/dates. Safe to re-run: cleaning an already-clean file changes nothing. | `uv run python scripts/clean_books_data.py` |
+| `scripts/test_metadata_coverage.py` | Reports what fraction of the books in `data/recent_20_books.csv` get a usable description from Open Library vs. Wikipedia vs. iTunes vs. none (looking each up by first author, as the sheet sync does). Useful after changing `utils/metadata_client.py`, to see whether coverage got better or worse. | `uv run python scripts/test_metadata_coverage.py` |
 
 The three scripts above take no command-line arguments — settings (file paths,
 thresholds) are constants near the top of each file if you need to change them.
@@ -237,10 +237,9 @@ unauthenticated request) because both are also free and keyless, with no
 account or API key to manage. The two are complementary rather than redundant:
 iTunes tends to cover current commercial nonfiction/self-help that Open Library
 misses, while missing niche/technical titles Wikipedia or Open Library catch.
-With all three sources and the current (typo-fixed) data, coverage on the
-58-book accurately-tracked tail of `data/books_clean.csv` is **71%** (28%
-Open Library + 19% Wikipedia + 24% iTunes) — up from 47% with just the
-Wikipedia fallback. Run `scripts/test_metadata_coverage.py` any time to
+With all three sources, coverage on the 20 books in `data/recent_20_books.csv` is **70%**
+(30% Open Library + 15% Wikipedia + 25% iTunes) — up from 47% with just the
+Wikipedia fallback in an earlier, larger test. Run `scripts/test_metadata_coverage.py` any time to
 re-measure it after further data or code changes.
 
 ## Tech stack

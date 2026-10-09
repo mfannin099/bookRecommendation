@@ -11,7 +11,7 @@ Setup:
 uv sync
 ```
 
-The web app needs no API key or `.env` file — all three metadata sources (Open Library, Wikipedia, iTunes) are free and keyless. (Only the Google Sheet sync below needs a `.env`, for `GOOGLE_SHEET_ID`.) Open Library alone only found descriptions for ~36% of a 236-book test library (measured before any fallback existed). With all three sources and current (typo-fixed) data, coverage on the 58-book accurately-tracked tail of `data/books_clean.csv` is 71% (28% Open Library + 19% Wikipedia + 24% iTunes) — see `scripts/test_metadata_coverage.py` to re-measure after further data or code changes.
+The web app needs no API key or `.env` file — all three metadata sources (Open Library, Wikipedia, iTunes) are free and keyless. (Only the Google Sheet sync below needs a `.env`, for `GOOGLE_SHEET_ID`.) Coverage on the 20 books in `data/recent_20_books.csv` is 70% (30% Open Library + 15% Wikipedia + 25% iTunes) — see `scripts/test_metadata_coverage.py` to re-measure after further data or code changes.
 
 Run the Flask app (dev):
 ```bash
@@ -28,12 +28,12 @@ Add a new dependency:
 uv add <package>
 ```
 
-Clean the raw personal book-tracker CSV (`data/Book Tracker - Sheet1.csv`) into `data/books_clean.csv` / `data/books_clean.parquet`:
+Re-clean `data/recent_20_books.csv` in place (idempotent):
 ```bash
 uv run python scripts/clean_books_data.py
 ```
 
-Measure `MetadataClient` description coverage (Open Library vs. Wikipedia fallback vs. not found) against the accurately-tracked tail of `data/books_clean.csv` (everything from "Why Machines learn" onward — earlier rows were reconstructed from memory and aren't reliable test data):
+Measure `MetadataClient` description coverage (Open Library vs. Wikipedia fallback vs. iTunes vs. not found) against the books in `data/recent_20_books.csv` (looked up by first author, as the sync does):
 ```bash
 uv run python scripts/test_metadata_coverage.py
 ```
@@ -87,4 +87,4 @@ Templates (`templates/*.html`) are plain Jinja2 with no shared base template; `s
 
 **Google Sheet sync (`scripts/sync_from_sheet.py`, `utils/sheets_client.py`):** CLI-only (no Flask route) path from the personal tracker sheet to recommendations. The sheet is shared as "anyone with the link: Viewer", so `fetch_sheet()` reads it as CSV from the export URL with no Google auth; `GOOGLE_SHEET_ID` (optional `GOOGLE_SHEET_GID`, default first tab) comes from `.env` via `python-dotenv`, and every error path avoids echoing the URL (`requests` exceptions embed it, so only the exception type is reported). `recent_tracked_books(df, n)` is the pure row-selection function: a row is "tracked" if it has a `year` or a parseable start/end date (so audiobooks logged with a year but no dates count, while the ~190 older undated "want to read" rows don't); rows missing a title or author are dropped; duplicates (case/whitespace-insensitive via `dedupe_key`) keep their last occurrence; and the result is the last `n` rows in **sheet order** (the sheet is appended chronologically), not re-sorted by date. `validate_n` is the single definition of the 1..`MAX_BOOKS` (50) limit, used by both the CLI's argparse type and the function. Dates go through `utils/book_dates.parse_date` (moved out of `scripts/clean_books_data.py`, which now imports it). The script passes `--genres` through as `genre_keywords` and names its output `matt_book_recommendations_<date>_<genres>.csv`. Known gap: author strings are passed to the lookups as written (e.g. `A & B`), unlike `clean_books_data.py` which normalizes `&`/`and` to commas. Tests live in `tests/test_sheets_client.py`.
 
-**Data cleaning (`scripts/clean_books_data.py`):** Standalone script (unrelated to the Flask app's `/recommend` pipeline) that cleans a personal reading log at `data/Book Tracker - Sheet1.csv` (248 raw rows → 235 clean rows as of this writing). Notable quirk it handles: the raw sheet often has two rows per book — a bare "want to read" row (title/author only) and a fully filled-in row added after finishing it — so dedup keeps whichever row (by title+author, case-insensitive) has the most non-null fields, not just the first match. This dedup is exact-match on the lowercased title+author string, so a typo in either field on just one of the two rows defeats it silently (the pair survives as two rows instead of merging) — this happened for several books in the raw data before a typo-fixing pass corrected it. Author lists get `&`/`and` normalized to `, ` (regex handles an existing Oxford comma too, e.g. "X, Y, and Z" → "X, Y, Z", not "X, Y,, Z"). Dates are messy and mixed-format (`13-Feb`, `20-Apr-25`, `6/16/25`, `early jan`); `parse_date` resolves day-month-without-year using the row's `year` column and approximates fuzzy month references ("early/mid/late/end <month>") to day 5/15/25, leaving anything else (e.g. "after Christmas") as `NaT` with the original text preserved in `start_date_raw`/`end_date_raw`.
+**Data cleaning (`scripts/clean_books_data.py`):** Standalone script (unrelated to the Flask app's `/recommend` pipeline) that re-cleans `data/recent_20_books.csv` in place. It is idempotent: an already-cleaned file carries the original date text in `start_date_raw`/`end_date_raw`, which the script re-parses, so running it again changes nothing. It keeps the most complete row per (title, author) when a book appears twice (a bare "want to read" row plus a filled-in one), normalizes `&`/`and` in authors to `, ` (handling an existing Oxford comma), lowercases/sorts genre tags, and parses messy dates via `utils/book_dates.parse_date` (day-month dates resolve against the `year` column; fuzzy references like "early jan" approximate to day 5/15/25; unparseable ones stay `NaT` with the original text preserved). `data/recent_20_books.csv` is also the fixture for `scripts/test_metadata_coverage.py`.

@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import clean_books_data  # noqa: E402
 import sync_from_sheet  # noqa: E402
 from sync_from_sheet import output_path  # noqa: E402
 from utils.book_columns import first_author  # noqa: E402
@@ -160,3 +161,17 @@ def test_cli_reports_recommender_failure_cleanly(monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["sync_from_sheet.py", "--n", "1"])
     assert sync_from_sheet.main() == 1
     assert "could not build recommendations: No books had usable descriptions." in capsys.readouterr().err
+
+
+def test_cleaning_is_idempotent():
+    raw = pd.DataFrame(
+        [
+            ("Book A", "Auth One & Auth Two", "Self-Help/Business", "7-Feb", "17-Feb", 2026, 291, None),
+            ("Audio B", "Auth Three", "ai, data", "20-Mar", "29-Mar", 2026, 209, "yes"),
+        ],
+        columns=["title", "author", "genre", "start_date", "end_date", "year", "page_count", "audiobook"],
+    )
+    once = clean_books_data.clean_books(raw)
+    twice = clean_books_data.clean_books(once)
+    pd.testing.assert_frame_equal(once, twice)
+    assert once["audiobook"].tolist() == [False, True]

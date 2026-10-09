@@ -1,9 +1,12 @@
 """Measures MetadataClient description coverage (Open Library / Wikipedia /
-not found) against the accurately-tracked tail of the reading history.
+iTunes / not found) against the books in data/recent_20_books.csv.
 
-Everything before "Why Machines learn" in data/books_clean.csv was
-reconstructed from memory rather than logged in real time, so it isn't
-reliable test data -- this script only scores rows from that title onward.
+Those rows were logged in real time, so unlike older history they are
+reliable test data. Authors go through first_author, exactly as the sheet sync
+does, so this measures the lookups the sync actually performs.
+
+Usage:
+    uv run python scripts/test_metadata_coverage.py
 """
 import sys
 from collections import Counter
@@ -13,16 +16,16 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from utils.book_columns import first_author
 from utils.metadata_client import MetadataClient
 
-BOOKS_CSV = Path(__file__).resolve().parent.parent / "data" / "books_clean.csv"
-TEST_START_TITLE = "why machines learn"
+BOOKS_CSV = Path(__file__).resolve().parent.parent / "data" / "recent_20_books.csv"
 
 
 def load_test_rows():
-    df = pd.read_csv(BOOKS_CSV)
-    start_idx = df.index[df["title"].str.lower() == TEST_START_TITLE][0]
-    return df.iloc[start_idx:][["title", "author"]].dropna()
+    df = pd.read_csv(BOOKS_CSV)[["title", "author"]].dropna()
+    df["author"] = df["author"].map(first_author)
+    return df
 
 
 def main():
