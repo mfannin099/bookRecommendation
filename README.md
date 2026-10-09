@@ -120,7 +120,7 @@ uv run python scripts/sync_from_sheet.py --genres ""               # no genre st
 - `--n` — how many recent books to look back (default 20, max 50). A book counts
   if it has a year or a date; undated "want to read" rows are ignored.
 - `--genres` — comma-separated keywords that steer recommendations toward those
-  topics (default `machine learning,data,business`). They are also added to the
+  topics (default `data,business`). They are also added to the
   output file name.
 - Typos in titles/authors in the sheet cost metadata matches — fix them at the
   source. Capitalization doesn't matter.

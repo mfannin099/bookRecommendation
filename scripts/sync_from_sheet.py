@@ -4,8 +4,8 @@ recommender on them.
 Needs GOOGLE_SHEET_ID in the environment or a gitignored .env (see
 .env.example). Results go to
 data/recommendations/matt_book_recommendations_<YYYY-MM-DD>_<genres>.csv;
-that directory is gitignored. Genres default to machine learning, data and
-business; pass --genres "" to run with none.
+that directory is gitignored. Genres default to data and business;
+pass --genres "" to run with none.
 
 Usage:
     uv run python scripts/sync_from_sheet.py --dry-run     # just list the books
@@ -36,7 +36,7 @@ from utils.sheets_client import (
 )
 
 OUTPUT_DIR = ROOT / "data" / "recommendations"
-DEFAULT_GENRES = "machine learning,data,business"
+DEFAULT_GENRES = "data,business"
 
 
 def _n_arg(value: str) -> int:

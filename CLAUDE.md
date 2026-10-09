@@ -38,7 +38,7 @@ Measure `MetadataClient` description coverage (Open Library vs. Wikipedia fallba
 uv run python scripts/test_metadata_coverage.py
 ```
 
-Sync the most recent books from the personal Google Sheet and write recommendations to `data/recommendations/matt_book_recommendations_<date>_<genres>.csv` (gitignored). Needs `GOOGLE_SHEET_ID` in a gitignored `.env` (copy `.env.example`) or the environment — the sheet ID is the only thing protecting a link-shared sheet, so it must never be committed, hardcoded, or printed. `--n` is the look-back count (default 20, max 50); `--genres` defaults to `machine learning,data,business` (`--genres ""` for none); `--dry-run` lists the books and stops, with no metadata lookups:
+Sync the most recent books from the personal Google Sheet and write recommendations to `data/recommendations/matt_book_recommendations_<date>_<genres>.csv` (gitignored). Needs `GOOGLE_SHEET_ID` in a gitignored `.env` (copy `.env.example`) or the environment — the sheet ID is the only thing protecting a link-shared sheet, so it must never be committed, hardcoded, or printed. `--n` is the look-back count (default 20, max 50); `--genres` defaults to `data,business` (`--genres ""` for none); `--dry-run` lists the books and stops, with no metadata lookups:
 ```bash
 uv run python scripts/sync_from_sheet.py --dry-run
 uv run python scripts/sync_from_sheet.py --n 30 --genres "golf,business"
