@@ -17,8 +17,9 @@ no virtualenv/pip, no Docker.
 uv sync
 ```
 
-That's the only setup step. No API key or `.env` file is needed — all three
-metadata sources (Open Library, Wikipedia, iTunes) are free and keyless.
+That's the only setup step for the web app. No API key or `.env` file is needed —
+all three metadata sources (Open Library, Wikipedia, iTunes) are free and keyless.
+(Only the optional Google Sheet sync below needs a `.env`.)
 
 ## Running the web app
 
@@ -91,8 +92,40 @@ the project root:
 | `scripts/clean_books_data.py` | Turn your raw reading-log export (`data/Book Tracker - Sheet1.csv`) into the cleaned `data/books_clean.csv` / `.parquet` — dedupes rows, standardizes dates/genres. Run this after editing the raw sheet. | `uv run python scripts/clean_books_data.py` |
 | `scripts/test_metadata_coverage.py` | Reports what fraction of your real reading history gets a usable description from Open Library vs. Wikipedia vs. iTunes vs. none. Useful after changing `utils/metadata_client.py` or the source data, to see whether coverage got better or worse. | `uv run python scripts/test_metadata_coverage.py` |
 
-None of these take command-line arguments — settings (file paths, thresholds)
-are constants near the top of each file if you need to change them.
+The three scripts above take no command-line arguments — settings (file paths,
+thresholds) are constants near the top of each file if you need to change them.
+
+### Syncing from a Google Sheet
+
+`scripts/sync_from_sheet.py` pulls your most recent books straight from your
+reading-log Google Sheet and writes recommendations to
+`data/recommendations/matt_book_recommendations_<date>_<genres>.csv`
+(gitignored).
+
+One-time setup:
+
+1. In the sheet, set sharing to **Anyone with the link: Viewer**. The sheet needs
+   `title`, `author`, `end_date` (and ideally `year`) columns.
+2. Copy `.env.example` to `.env` and set `GOOGLE_SHEET_ID` to the long string
+   between `/d/` and `/edit` in the sheet's URL. `.env` is gitignored — keep the
+   ID out of Git, since anyone with the link can read the sheet.
+
+```bash
+uv run python scripts/sync_from_sheet.py --dry-run                 # list the books it would use
+uv run python scripts/sync_from_sheet.py                           # 20 books, default genres
+uv run python scripts/sync_from_sheet.py --n 30 --genres "golf,business"
+uv run python scripts/sync_from_sheet.py --genres ""               # no genre steering
+```
+
+- `--n` — how many recent books to look back (default 20, max 50). A book counts
+  if it has a year or a date; undated "want to read" rows are ignored.
+- `--genres` — comma-separated keywords that steer recommendations toward those
+  topics (default `machine learning,data,business`). They are also added to the
+  output file name.
+- Typos in titles/authors in the sheet cost metadata matches — fix them at the
+  source. Capitalization doesn't matter.
+
+Run the tests with `uv run pytest`.
 
 ## Using the metadata lookup directly
 
@@ -163,6 +196,10 @@ this isn't fast enough.
 - `utils/metadata_client.py` — the Open Library / Wikipedia / iTunes lookup client shared by
   everything above (see "Using the metadata lookup directly").
 - `scripts/clean_books_data.py` — cleans the raw personal reading-log export.
+- `scripts/sync_from_sheet.py` / `utils/sheets_client.py` — reads the latest books
+  from the Google Sheet and runs the recommender on them.
+- `utils/book_dates.py`, `utils/book_columns.py` — date parsing and column-alias
+  helpers shared by the cleaner, the web app and the sheet sync.
 - `scripts/test_metadata_coverage.py` — measures description coverage against
   real reading history.
 - `quick_start.py` — runs the recommender from the command line, no Flask UI.

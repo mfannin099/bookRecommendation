@@ -1,5 +1,5 @@
-"""Read the personal book-tracker Google Sheet and pick out the most recently
-finished books.
+"""Read the personal book-tracker Google Sheet and pick out the most recent
+tracked books.
 
 The sheet is shared as "anyone with the link: Viewer", so no Google auth is
 needed - Google serves any tab as CSV from a predictable export URL. That
@@ -44,6 +44,13 @@ class SheetSyncError(Exception):
     """Raised for any failure to read the sheet. Messages never contain the URL."""
 
 
+def validate_n(n: int) -> int:
+    """Return n if it is a legal look-back count, else raise SheetSyncError."""
+    if not 1 <= n <= MAX_BOOKS:
+        raise SheetSyncError(f"n must be between 1 and {MAX_BOOKS} (got {n}).")
+    return n
+
+
 def _export_url() -> str:
     load_dotenv()
     sheet_id = os.environ.get(SHEET_ID_ENV, "").strip()
@@ -83,6 +90,10 @@ def _tidy(value) -> str:
     return " ".join(str(value).split()) if pd.notna(value) else ""
 
 
+def _column_or_blank(df: pd.DataFrame, name: str) -> pd.Series:
+    return df[name] if name in df.columns else pd.Series([None] * len(df), index=df.index)
+
+
 def recent_tracked_books(df: pd.DataFrame, n: int = DEFAULT_BOOKS) -> pd.DataFrame:
     """Return the `n` most recent tracked books as a DataFrame with columns
     title, author, end_date (NaT if no end date logged yet), oldest first.
@@ -91,8 +102,7 @@ def recent_tracked_books(df: pd.DataFrame, n: int = DEFAULT_BOOKS) -> pd.DataFra
     or author are skipped (a lookup without an author is unreliable);
     duplicate title+author pairs keep their last occurrence.
     """
-    if not 1 <= n <= MAX_BOOKS:
-        raise SheetSyncError(f"n must be between 1 and {MAX_BOOKS} (got {n}).")
+    validate_n(n)
     title_col = find_column(df.columns, TITLE_COLUMN_ALIASES)
     author_col = find_column(df.columns, AUTHOR_COLUMN_ALIASES)
     if title_col is None or author_col is None or "end_date" not in df.columns:
@@ -100,23 +110,21 @@ def recent_tracked_books(df: pd.DataFrame, n: int = DEFAULT_BOOKS) -> pd.DataFra
             f"Sheet is missing expected columns. Found: {', '.join(map(str, df.columns))}. "
             f"Need a title column, an author column, and 'end_date'."
         )
-    years = df["year"] if "year" in df.columns else pd.Series([None] * len(df), index=df.index)
-    starts = df["start_date"] if "start_date" in df.columns else pd.Series([None] * len(df), index=df.index)
+    years = _column_or_blank(df, "year")
+    end_dates = pd.Series([parse_date(raw, y) for raw, y in zip(df["end_date"], years)], index=df.index)
+    start_dates = pd.Series(
+        [parse_date(raw, y) for raw, y in zip(_column_or_blank(df, "start_date"), years)], index=df.index
+    )
 
-    end_dates = [parse_date(raw, year) for raw, year in zip(df["end_date"], years)]
-    start_dates = [parse_date(raw, year) for raw, year in zip(starts, years)]
+    titles = df[title_col].map(_tidy)
+    authors = df[author_col].map(_tidy)
     books = pd.DataFrame({
-        "title": df[title_col].map(_tidy),
-        "author": df[author_col].map(_tidy),
+        "title": titles,
+        "author": authors,
         "end_date": end_dates,
+        "key": [dedupe_key(t, a) for t, a in zip(titles, authors)],
     })
-    tracked = years.notna() | pd.Series(end_dates, index=df.index).notna() | pd.Series(start_dates, index=df.index).notna()
+    tracked = years.notna() | end_dates.notna() | start_dates.notna()
     books = books[tracked & (books["title"] != "") & (books["author"] != "")]
-    books = books[~books.apply(lambda r: dedupe_key(r["title"], r["author"]), axis=1).duplicated(keep="last")]
+    books = books[~books["key"].duplicated(keep="last")].drop(columns="key")
     return books.tail(n).reset_index(drop=True)
-
-
-def fetch_recent_books(n: int = DEFAULT_BOOKS) -> list[tuple[str, str]]:
-    """(title, author) pairs for the `n` most recent tracked books."""
-    books = recent_tracked_books(fetch_sheet(), n)
-    return list(zip(books["title"], books["author"]))
