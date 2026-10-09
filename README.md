@@ -125,6 +125,26 @@ uv run python scripts/sync_from_sheet.py --genres ""               # no genre st
 - Typos in titles/authors in the sheet cost metadata matches — fix them at the
   source. Capitalization doesn't matter.
 
+### Weekly automation (GitHub Actions)
+
+`.github/workflows/weekly-recommendations.yml` runs the sync every **Saturday at
+12:00 UTC (8:00 AM Eastern in daylight time, 7:00 AM after clocks fall back)** and
+can also be started by hand (Actions tab → *Weekly book recommendations* → *Run
+workflow*, with an optional `n`). Each run:
+
+1. installs dependencies and runs the tests,
+2. runs the sync with the default genres (`data,business`),
+3. runs it again with `psychology,self-help`,
+4. commits both CSVs to the **`results`** branch under `recommendations/`
+   (the branch is created on the first run; `master` is never touched).
+
+One-time setup: add the sheet ID as a repository secret named `GOOGLE_SHEET_ID`
+(Settings → Secrets and variables → Actions → New repository secret). Because the
+repo is public, the run logs and the `results` branch are public: they show the
+book titles/authors/dates and the recommendations, but never the sheet ID (the
+script doesn't print it and GitHub masks secrets). If either run fails, the
+workflow run is marked failed and the other list is still published.
+
 Run the tests with `uv run pytest`.
 
 ## Using the metadata lookup directly

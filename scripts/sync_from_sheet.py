@@ -20,6 +20,7 @@ from datetime import date
 from pathlib import Path
 
 import pandas as pd
+import requests
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -90,7 +91,14 @@ def main() -> int:
         force_run=True,
         genre_keywords=genre_keywords,
     )
-    recommendations = recommender.get_recommendations()
+    try:
+        recommendations = recommender.get_recommendations()
+    except (ValueError, requests.RequestException) as e:
+        # ValueError = pipeline found nothing usable (no descriptions/candidates).
+        # Keep the failure a clean one-liner + exit 1, not a traceback, so an
+        # unattended run's log says what went wrong.
+        print(f"Error: could not build recommendations: {e}", file=sys.stderr)
+        return 1
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out_path = output_path(genre_keywords, date.today())

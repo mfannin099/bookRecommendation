@@ -1,0 +1,95 @@
+name: Weekly book recommendations
+
+# Every Saturday morning, pull the most recent books from the Google Sheet and
+# write two recommendation CSVs (default genres, then psychology/self-help) to
+# the `results` branch. See "Weekly automation" in README.md.
+
+on:
+  schedule:
+    # GitHub cron is UTC. 12:00 UTC = 8:00 AM Eastern during daylight time
+    # (7:00 AM after clocks fall back); GitHub may start the run a few minutes late.
+    - cron: "0 12 * * 6"
+  workflow_dispatch:
+    inputs:
+      n:
+        description: "How many recent books to look back (1-50)"
+        default: "30"
+
+# Needed to push the `results` branch.
+permissions:
+  contents: write
+
+# Never let two runs push to `results` at once.
+concurrency:
+  group: weekly-recommendations
+  cancel-in-progress: false
+
+jobs:
+  recommend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+      # Scheduled runs have no inputs, so fall back to 30.
+      N: ${{ inputs.n || '30' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run tests
+        run: uv run pytest -q
+
+      - name: Check the sheet secret is configured
+        run: |
+          if [ -z "$GOOGLE_SHEET_ID" ]; then
+            echo "::error::Repository secret GOOGLE_SHEET_ID is not set (Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+
+      - name: Recommendations (default genres)
+        run: uv run python scripts/sync_from_sheet.py --n "$N"
+
+      # !cancelled() so the second list is still attempted if the first failed.
+      - name: Recommendations (psychology, self-help)
+        if: ${{ !cancelled() }}
+        run: uv run python scripts/sync_from_sheet.py --n "$N" --genres "psychology,self-help"
+
+      - name: Publish CSVs to the results branch
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(data/recommendations/*.csv)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No CSVs were produced; nothing to publish."
+            exit 0
+          fi
+
+          # Check out `results` into a side worktree, creating it (empty, with
+          # its own history) the first time.
+          if git ls-remote --exit-code --heads origin results >/dev/null 2>&1; then
+            git fetch origin results
+            git worktree add results-wt -B results origin/results
+          else
+            git worktree add --detach results-wt
+            git -C results-wt checkout --orphan results
+            git -C results-wt rm -rf --quiet .
+          fi
+
+          mkdir -p results-wt/recommendations
+          cp "${files[@]}" results-wt/recommendations/
+
+          cd results-wt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add recommendations
+          if git diff --cached --quiet; then
+            echo "Results unchanged; nothing to commit."
+            exit 0
+          fi
+          git commit -m "Weekly recommendations $(date -u +%F)"
+          git push origin results

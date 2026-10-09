@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import sync_from_sheet  # noqa: E402
 from sync_from_sheet import output_path  # noqa: E402
 from utils.book_columns import first_author  # noqa: E402
 from utils.book_dates import parse_date  # noqa: E402
@@ -143,3 +144,19 @@ def test_output_path_without_genres_and_unsafe_characters():
 )
 def test_first_author(raw, expected):
     assert first_author(raw) == expected
+
+
+def test_cli_reports_recommender_failure_cleanly(monkeypatch, capsys):
+    monkeypatch.setattr(sync_from_sheet, "fetch_sheet", lambda: sheet(("B", "A", None, "1-Jan", 2026)))
+
+    class Failing:
+        def __init__(self, **kwargs):
+            pass
+
+        def get_recommendations(self):
+            raise ValueError("No books had usable descriptions.")
+
+    monkeypatch.setattr(sync_from_sheet, "BookRecommender", Failing)
+    monkeypatch.setattr(sys, "argv", ["sync_from_sheet.py", "--n", "1"])
+    assert sync_from_sheet.main() == 1
+    assert "could not build recommendations: No books had usable descriptions." in capsys.readouterr().err
