@@ -44,7 +44,7 @@ uv run python scripts/sync_from_sheet.py --dry-run
 uv run python scripts/sync_from_sheet.py --n 30 --genres "golf,business"
 ```
 
-The scheduled run lives in `.github/workflows/weekly-recommendations.yml` (Saturdays 12:00 UTC; also `workflow_dispatch`): it runs the tests, then `sync_from_sheet.py` with default genres and again with `motivation,productivity`, and commits the CSVs to an auto-created `results` branch (`recommendations/`) via a side `git worktree`. It needs the `GOOGLE_SHEET_ID` repository secret. The repo is public, so Actions logs and `results` expose book titles and recommendations (not the sheet ID). `sync_from_sheet.py` returns exit code 1 with a one-line `Error:` for sheet and recommender failures so a failed CI step is readable.
+The scheduled run lives in `.github/workflows/weekly-recommendations.yml` (Saturdays 12:17 UTC; also `workflow_dispatch`): it runs the tests, then `sync_from_sheet.py` with default genres and again with `motivation,productivity`, and commits the CSVs to an auto-created `results` branch (`recommendations/`) via a side `git worktree`. It needs the `GOOGLE_SHEET_ID` repository secret. The repo is public, so Actions logs and `results` expose book titles and recommendations (not the sheet ID). `sync_from_sheet.py` returns exit code 1 with a one-line `Error:` for sheet and recommender failures so a failed CI step is readable.
 
 Run the tests (pytest, dev dependency; no network — they cover the sheet row-selection rules, date parsing and output filenames):
 ```bash

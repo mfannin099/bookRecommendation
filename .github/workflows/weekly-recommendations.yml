@@ -6,9 +6,10 @@ name: Weekly book recommendations
 
 on:
   schedule:
-    # GitHub cron is UTC. 12:00 UTC = 8:00 AM Eastern during daylight time
-    # (7:00 AM after clocks fall back); GitHub may start the run a few minutes late.
-    - cron: "0 12 * * 6"
+    # GitHub cron is UTC. 12:17 UTC = 8:17 AM Eastern during daylight time
+    # (7:17 AM after clocks fall back). Deliberately off the top of the hour:
+    # :00 runs are the most likely to be delayed or dropped by GitHub.
+    - cron: "17 12 * * 6"
   workflow_dispatch:
     inputs:
       n:

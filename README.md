@@ -128,7 +128,7 @@ uv run python scripts/sync_from_sheet.py --genres ""               # no genre st
 ### Weekly automation (GitHub Actions)
 
 `.github/workflows/weekly-recommendations.yml` runs the sync every **Saturday at
-12:00 UTC (8:00 AM Eastern in daylight time, 7:00 AM after clocks fall back)** and
+12:17 UTC (8:17 AM Eastern in daylight time, 7:17 AM after clocks fall back)** and
 can also be started by hand (Actions tab → *Weekly book recommendations* → *Run
 workflow*, with an optional `n`). Each run:
 
