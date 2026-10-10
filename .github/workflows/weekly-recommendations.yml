@@ -10,6 +10,8 @@ on:
     # (7:17 AM after clocks fall back). Deliberately off the top of the hour:
     # :00 runs are the most likely to be delayed or dropped by GitHub.
     - cron: "17 12 * * 6"
+    # TEMPORARY one-off test (Oct 10 2026, 15:14 UTC); remove after it has run.
+    - cron: "14 15 10 10 *"
   workflow_dispatch:
     inputs:
       n:
