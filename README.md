@@ -121,7 +121,7 @@ uv run python scripts/sync_from_sheet.py --genres ""               # no genre st
   if it has a year or a date; undated "want to read" rows are ignored.
 - `--top` — how many recommendations to return (default 15, max 50).
 - `--genres` — comma-separated keywords that steer recommendations toward those
-  topics (default `data,business`). They are also added to the
+  topics (default `analytics,strategy,business,data`). They are also added to the
   output file name.
 - Typos in titles/authors in the sheet cost metadata matches — fix them at the
   source. Capitalization doesn't matter.
@@ -134,8 +134,8 @@ can also be started by hand (Actions tab → *Weekly book recommendations* → *
 workflow*, with an optional `n`). Each run:
 
 1. installs dependencies and runs the tests,
-2. runs the sync with the default genres (`data,business`),
-3. runs it again with `motivation,productivity`,
+2. runs the sync with the default genres (`analytics,strategy,business,data`),
+3. runs it again with `habits,discipline,mindset`,
 4. commits both CSVs to the **`results`** branch under `recommendations/`
    (the branch is created on the first run; `master` is never touched).
 

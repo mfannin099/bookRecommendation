@@ -19,6 +19,7 @@ import sync_from_sheet  # noqa: E402
 from sync_from_sheet import output_path  # noqa: E402
 from utils.book_columns import first_author  # noqa: E402
 from utils.book_dates import parse_date  # noqa: E402
+from utils.recommender import _is_usable_subject  # noqa: E402
 from utils.sheets_client import MAX_BOOKS, SheetSyncError, recent_tracked_books, validate_n  # noqa: E402
 
 COLUMNS = ["title", "author", "start_date", "end_date", "year"]
@@ -184,3 +185,22 @@ def test_top_arg_range(value, ok):
     else:
         with pytest.raises(Exception, match="whole number"):
             sync_from_sheet._top_arg(value)
+
+
+@pytest.mark.parametrize(
+    "subject, usable",
+    [
+        ("Leadership", True),
+        ("Machine learning", True),
+        ("Self-help", True),
+        ("Nonfiction", False),
+        ("History", False),
+        ("Books", False),
+        ("Biography", False),
+        ("Accessible book", False),
+        ("New York Times bestseller", False),
+        ("Bf637.s8 c37 1998", False),
+    ],
+)
+def test_generic_subjects_are_not_used_for_candidate_search(subject, usable):
+    assert _is_usable_subject(subject) is usable

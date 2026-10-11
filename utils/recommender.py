@@ -71,12 +71,27 @@ _USABLE_SUBJECT_RE = re.compile(r"^[A-Za-z][A-Za-z \-']{2,40}$")
 _BOILERPLATE_SUBJECT_RE = re.compile(r"bestsell", re.IGNORECASE)
 
 
+# Open Library subjects so broad that "most popular books tagged X" returns
+# the same crowd-pleasers (Shoe Dog, Born a Crime, Into Thin Air) for every
+# profile regardless of topic, plus catalog-status tags that say nothing about
+# content. Skipped when choosing subjects for fetch_subject_candidates.
+_GENERIC_SUBJECTS = frozenset({
+    "books", "nonfiction", "non-fiction", "fiction", "history", "biography",
+    "general", "reading", "popular works", "accessible book", "protected daisy",
+    "in library", "internet archive wishlist", "large type books",
+})
+
+
 def strip_punctuation(text):
     return re.sub(f"[{re.escape(string.punctuation)}]", "", str(text))
 
 
 def _is_usable_subject(subject):
-    return bool(_USABLE_SUBJECT_RE.match(subject)) and not _BOILERPLATE_SUBJECT_RE.search(subject)
+    return (
+        bool(_USABLE_SUBJECT_RE.match(subject))
+        and not _BOILERPLATE_SUBJECT_RE.search(subject)
+        and subject.strip().lower() not in _GENERIC_SUBJECTS
+    )
 
 
 class BookRecommender:

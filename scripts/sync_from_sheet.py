@@ -37,7 +37,7 @@ from utils.sheets_client import (
 )
 
 OUTPUT_DIR = ROOT / "data" / "recommendations"
-DEFAULT_GENRES = "data,business"
+DEFAULT_GENRES = "analytics,strategy,business,data"
 DEFAULT_TOP = 15
 MAX_TOP = 50
 
