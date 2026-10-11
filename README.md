@@ -1,249 +1,229 @@
 # Book Recommendation
 
-A Flask app that recommends new books based on the books you've already read. You
-give it a list of titles/authors (typed in one at a time, or uploaded as a file),
-and it looks up each one on Open Library (falling back to Wikipedia, then to
-Apple's iTunes Search API, when Open Library doesn't have a description), builds
-a taste profile from those descriptions, searches Open Library for similar books
-you haven't read yet, and ranks the results by how similar they are to your
-profile.
+Recommends new books based on the ones you've read. It looks up each book on Open
+Library (falling back to Wikipedia, then Apple's iTunes Search API, when Open
+Library has no description), builds a taste profile from those descriptions,
+searches Open Library for similar unread books, and ranks them by similarity. All
+sources are free and keyless.
+
+Two ways to use it:
+
+1. **Web app** (`main.py`) — type or upload a book list, get recommendations in the
+   browser. Nothing is saved between restarts.
+2. **Weekly automation** (`scripts/sync_from_sheet.py` + GitHub Actions) — reads your
+   reading-log Google Sheet and, every Saturday, commits two fresh recommendation
+   CSVs to a `results` branch. Your laptop doesn't need to be on.
+
+**Status:** feature-complete. See [Limitations](#known-limitations) and
+[ideas not built](#ideas-not-built).
 
 ## Setup
 
-This project uses [uv](https://docs.astral.sh/uv/) for dependency management —
-no virtualenv/pip, no Docker.
-
 ```bash
-uv sync
+uv sync          # uv manages the virtualenv; no API keys needed for the web app
+uv run pytest    # 47 offline tests
 ```
 
-That's the only setup step for the web app. No API key or `.env` file is needed —
-all three metadata sources (Open Library, Wikipedia, iTunes) are free and keyless.
-(Only the optional Google Sheet sync below needs a `.env`.)
-
-## Running the web app
+## Web app
 
 ```bash
-uv run python main.py        # serves on 0.0.0.0:5001
+uv run python main.py        # http://localhost:5001
 ```
 
-Then open `http://localhost:5001` in a browser. (Port 5001 was picked over the
-Flask default of 5000 because on macOS, 5000 is usually taken by the AirPlay
-Receiver. If 5001 is taken too, run on a different port instead:
-`uv run python -c "from main import app; app.run(host='0.0.0.0', port=5002)"`.)
+- **Add books** one at a time on the homepage, or **upload** `.csv`/`.xlsx` (title +
+  author columns; aliases like `book title`, `authors` work) or `.txt` (one
+  `Title - Author` per line). Duplicates are skipped and counted in a banner.
+- **Get Recommendations** runs the pipeline and shows "Based on N of M books"
+  (how many had a usable description). An optional "steer toward genre" field
+  (e.g. `golf, business`) nudges results without changing your list.
+- Returns 10 results. Weak matches are dropped, not padded in.
+- Your list lives in memory only; keep your own `.csv` to re-upload.
+- `/recommend` is slow (minutes): it makes 150–250 rate-limited network calls.
 
-What you'll see:
+Other scripts:
 
-1. **Homepage** (`/`) — a form to add one book (title + author) at a time, plus
-   the running list of what you've added so far, with edit/delete controls next
-   to each entry. Adding a book already in your list is a no-op (with a message
-   saying so) rather than a silent duplicate.
-2. **Upload** (`/upload`) — add many books at once instead of typing them in.
-   Accepts multiple files per upload, any mix of:
-   - `.csv` / `.xlsx` with a title column (`title`, `book`, `book title`, or
-     `name`) and an author column (`author`, `authors`, `author name`, or
-     `writer`) — case-insensitive, and comma-, semicolon-, or tab-separated
-     `.csv` all work. The same shape as `data/recent_20_books.csv`, so you can
-     upload that file directly. If the columns can't be found, the error
-     message shows exactly what columns were detected so you can fix the file.
-   - `.txt` with one `Title - Author` per line. If your title itself contains
-     `" - "` (common in subtitled nonfiction, e.g. "Chip War - The Fight for
-     the World's Most Critical Technology"), it's split on the *last*
-     `" - "` in the line, since an author name essentially never contains one.
-   After uploading, a banner right at the top of the page (impossible to
-   miss — no scrolling needed) shows how many books were added and how many
-   were skipped as duplicates of ones already in your list.
-3. **Get Recommendations** (`/recommend`) — once your list has at least one book,
-   this triggers the pipeline: look up each book's description, build a search
-   query from the most distinctive terms across them, search Open Library for
-   similar titles you haven't already read, and rank the results. The page
-   tells you up front how many of your books it could actually match to a
-   description (e.g. "Based on 41 of your 58 books — 17 couldn't be matched
-   to a description"), so you know how much of your library the
-   recommendations are really built from. Each result shows a description
-   snippet, not just a bare title, and weak/spurious matches are dropped
-   rather than padded in to fill out a round number of recommendations.
-   There's also an optional "steer toward genre" field on
-   this form — type a genre (or a few, comma-separated, e.g. "golf, business")
-   to nudge results that direction without changing your actual reading list.
-   It's a light touch by default: your own books still drive most of the
-   signal, but it's enough to meaningfully shift results (tested: a reading
-   list with no golf books at all still returned nearly all golf
-   recommendations when "golf" was typed in). Leave it blank for today's
-   behavior, typed fresh each time you click the button — nothing is saved.
+| Script | Purpose |
+|---|---|
+| `quick_start.py` | Run the pipeline on a hardcoded list, no browser. |
+| `scripts/clean_books_data.py` | Idempotently re-clean `data/recent_20_books.csv`. |
+| `scripts/test_metadata_coverage.py` | Measure how many of those books get a description from each source (currently ~70%). |
 
-Your list lives only in the running process's memory — nothing is written to
-disk. **This app has no persistence across restarts**, by design. There's
-nothing to log into and nothing to lose by restarting; if you want a list to
-survive, keep your own copy as a `.csv` and re-upload it next time.
+## Syncing from a Google Sheet
 
-Expect `/recommend` to take a while (see "Why it's slow" below) — it's making
-real, rate-limited network calls for every book in your list plus every
-candidate it considers, one at a time.
+`scripts/sync_from_sheet.py` takes your most recent books from the sheet, runs the
+recommender, and writes
+`data/recommendations/matt_book_recommendations_<date>_<genres>.csv` (gitignored).
 
-## Scripts
+**Setup**
 
-These are the pieces you'd run yourself, outside the web UI, from a terminal in
-the project root:
+1. Share the sheet as **Anyone with the link: Viewer** (no Google login needed). It
+   needs a title column, an author column, `end_date`, and ideally `start_date` and
+   `year`.
+2. `cp .env.example .env` and set `GOOGLE_SHEET_ID` (the string between `/d/` and
+   `/edit` in the sheet URL). Optional: `GOOGLE_SHEET_GID` for a tab other than the
+   first.
 
-| Script | What it's for | Command |
+> **Keep the sheet ID out of Git.** On a link-shared sheet the ID is the password.
+> It's read only from the environment and never logged or put in error messages.
+> Check before pushing: `git ls-files -co --exclude-standard | xargs grep -l "<id>"`
+> should print nothing.
+
+```bash
+uv run python scripts/sync_from_sheet.py --dry-run     # list the books it would use
+uv run python scripts/sync_from_sheet.py              # defaults
+uv run python scripts/sync_from_sheet.py --n 30 --top 20 --genres "golf,business"
+```
+
+| Flag | Default | Meaning |
 |---|---|---|
-| `quick_start.py` | Run the recommendation pipeline against a couple of hardcoded books (`BOOKS` list at the top of the file — edit it to try your own), no Flask/browser needed. Good for checking the pipeline still works end to end. | `uv run python quick_start.py` |
-| `scripts/clean_books_data.py` | Re-clean `data/recent_20_books.csv` in place — dedupes rows, standardizes authors/genres/dates. Safe to re-run: cleaning an already-clean file changes nothing. | `uv run python scripts/clean_books_data.py` |
-| `scripts/test_metadata_coverage.py` | Reports what fraction of the books in `data/recent_20_books.csv` get a usable description from Open Library vs. Wikipedia vs. iTunes vs. none (looking each up by first author, as the sheet sync does). Useful after changing `utils/metadata_client.py`, to see whether coverage got better or worse. | `uv run python scripts/test_metadata_coverage.py` |
+| `--n` | 20 (max 50) | Recent books to look back. |
+| `--top` | 15 (max 50) | Recommendations to return. |
+| `--genres` | `analytics,strategy,business,data` | Topic keywords; `""` for none. |
+| `--dry-run` | off | List the books and stop. |
 
-The three scripts above take no command-line arguments — settings (file paths,
-thresholds) are constants near the top of each file if you need to change them.
+A full run takes ~5 minutes. Failures print one `Error: ...` line and exit 1.
 
-### Syncing from a Google Sheet
+**Which books:** the last `n` rows, in sheet order, that have a `year` or a parseable
+date (so undated "want to read" rows are ignored, but an audiobook with only a year
+counts). Rows missing a title or author are skipped; duplicates keep the latest.
+Messy dates (`13-Feb`, `6/16/25`, `6-Sept`) are parsed against the `year` column.
+Co-authored books are looked up by their **first author**, because Wikipedia and
+iTunes need the author string to match exactly (the CSV still shows all authors).
 
-`scripts/sync_from_sheet.py` pulls your most recent books straight from your
-reading-log Google Sheet and writes recommendations to
-`data/recommendations/matt_book_recommendations_<date>_<genres>.csv`
-(gitignored).
+**Genre keywords** are added to the taste profile and to the Open Library search,
+which requires *all* terms to match, so more keywords means *fewer* candidates.
+Concrete topic nouns beat umbrella labels. Tried on a 30-book profile:
 
-One-time setup:
+| Keywords | Result |
+|---|---|
+| `analytics,strategy,business,data` | Best, ~13/15 on topic (default) |
+| `data,business` | Good, weaker tail |
+| `habits,discipline,mindset` | Improved (*Atomic Habits* first), thin tail |
+| `machine learning,data,business` | On topic but all academic textbooks |
+| `motivation,productivity`, `psychology,self-help` | Weak, ~2/10 on topic |
 
-1. In the sheet, set sharing to **Anyone with the link: Viewer**. The sheet needs
-   `title`, `author`, `end_date` (and ideally `year`) columns.
-2. Copy `.env.example` to `.env` and set `GOOGLE_SHEET_ID` to the long string
-   between `/d/` and `/edit` in the sheet's URL. `.env` is gitignored — keep the
-   ID out of Git, since anyone with the link can read the sheet.
+**Output columns:** `title, subtitle, authors, description, similarity, matched_terms,
+matched_subjects`.
 
-```bash
-uv run python scripts/sync_from_sheet.py --dry-run                 # list the books it would use
-uv run python scripts/sync_from_sheet.py                           # 20 books, default genres
-uv run python scripts/sync_from_sheet.py --n 30 --genres "golf,business"
-uv run python scripts/sync_from_sheet.py --genres ""               # no genre steering
+## Weekly automation
+
+`.github/workflows/weekly-recommendations.yml` runs **Saturdays at 12:17 UTC** (8:17
+AM EDT; 7:17 AM after Nov 1 since cron ignores daylight saving — use `17 13` to
+keep 8:17 AM). You can also start it from the Actions tab (**Run workflow**, optional
+`n`, default 30). One job, up to 60 minutes:
+
+1. install, run the tests, check the `GOOGLE_SHEET_ID` secret exists;
+2. run the sync with the default genres;
+3. run it again with `habits,discipline,mindset` (still runs if step 2 failed);
+4. commit both CSVs to the **`results`** branch under `recommendations/`.
+
+**Setup:** add the repository secret `GOOGLE_SHEET_ID` (Settings → Secrets and
+variables → Actions). Nothing else is needed.
+
+**The `results` branch** is created on the first run, has its own history, and is
+written only by the workflow — never merge `master` into it. Each run adds one commit
+with two new files. View it at
+`github.com/mfannin099/bookRecommendation/tree/results/recommendations`, or locally:
+`git fetch origin results && git ls-tree -r --name-only origin/results`.
+
+**Privacy:** the repo is public, so logs and `results` show your recent book titles,
+authors and finish dates plus the recommendations — never the sheet ID or other
+columns. Making the repo private would hide them.
+
+**Timing:** GitHub scheduled runs are best-effort. Here, the first slot never fired
+and a test slot ran about 4 hours late (then succeeded in ~10 min). Expect hours of
+delay and the occasional skipped week; GitHub shows no "next run" view and may
+disable schedules after ~60 days without repo activity. Use **Run workflow** to get
+results on demand.
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `GOOGLE_SHEET_ID is not set` | Create `.env` (local) or add the repo secret (CI). |
+| `HTTP 404` | Wrong sheet ID or `GOOGLE_SHEET_GID`. |
+| `returned a web page instead of CSV` | Sheet isn't shared as "Anyone with the link: Viewer". |
+| `Sheet is missing expected columns` | Header changed; need title, author and `end_date`. |
+| "Based on 20 of 30 books" | Normal: title typos in the sheet (capitalization is ignored) or books missing from all sources. |
+| Lookup `500` / timeout | Open Library is flaky; that lookup is skipped, so results vary slightly. |
+| Saturday run missing | Wait a few hours, then use **Run workflow**. |
+| Unrelated novels in the list | The keywords found few candidates; try different or fewer, more concrete ones. |
+
+## Project layout
+
+```
+main.py                    Flask app
+quick_start.py             CLI runner for a hardcoded list
+utils/
+  recommender.py           BookRecommender: lookup -> TF-IDF profile -> candidates -> ranking
+  metadata_client.py       Open Library / Wikipedia / iTunes lookups
+  sheets_client.py         reads the sheet CSV, picks the last n tracked books
+  book_columns.py          column aliases, dedupe key, first_author()
+  book_dates.py            parse_date() for the sheet's messy dates
+scripts/                   sync_from_sheet, clean_books_data, test_metadata_coverage
+tests/                     offline tests (selection rules, dates, filenames, CLI, filters)
+data/recent_20_books.csv   fixture; data/recommendations/ is generated and gitignored
+.github/workflows/         weekly-recommendations.yml
+CLAUDE.md                  detailed architecture notes
 ```
 
-- `--n` — how many recent books to look back (default 20, max 50). A book counts
-  if it has a year or a date; undated "want to read" rows are ignored.
-- `--top` — how many recommendations to return (default 15, max 50).
-- `--genres` — comma-separated keywords that steer recommendations toward those
-  topics (default `analytics,strategy,business,data`). They are also added to the
-  output file name.
-- Typos in titles/authors in the sheet cost metadata matches — fix them at the
-  source. Capitalization doesn't matter.
+`master` holds all code; `results` is automation-only.
 
-### Weekly automation (GitHub Actions)
+## Why Open Library, and two fallbacks
 
-`.github/workflows/weekly-recommendations.yml` runs the sync every **Saturday at
-12:17 UTC (8:17 AM Eastern in daylight time, 7:17 AM after clocks fall back)** and
-can also be started by hand (Actions tab → *Weekly book recommendations* → *Run
-workflow*, with an optional `n`). Each run:
+Open Library needs no key and has no rate limit, but its descriptions are patchy:
+alone it covered ~36% of a 236-book test library. Wikipedia and iTunes (ebooks) were
+added as free, keyless fallbacks (Google Books' keyless access is disabled). They
+complement each other: iTunes covers current commercial nonfiction, Wikipedia and
+Open Library catch niche titles. Together they cover ~70% of the sample in
+`data/recent_20_books.csv` (30% Open Library, 15% Wikipedia, 25% iTunes).
 
-1. installs dependencies and runs the tests,
-2. runs the sync with the default genres (`analytics,strategy,business,data`),
-3. runs it again with `habits,discipline,mindset`,
-4. commits both CSVs to the **`results`** branch under `recommendations/`
-   (the branch is created on the first run; `master` is never touched).
-
-One-time setup: add the sheet ID as a repository secret named `GOOGLE_SHEET_ID`
-(Settings → Secrets and variables → Actions → New repository secret). Because the
-repo is public, the run logs and the `results` branch are public: they show the
-book titles/authors/dates and the recommendations, but never the sheet ID (the
-script doesn't print it and GitHub masks secrets). If either run fails, the
-workflow run is marked failed and the other list is still published.
-
-Run the tests with `uv run pytest`.
-
-## Using the metadata lookup directly
-
-`utils/metadata_client.py` doesn't expose a web API of its own — it's a plain Python module
-you call from code. If you want to test a single lookup without running the
-whole app, drop into a Python shell in the project root:
-
-```bash
-uv run python
-```
+Lookups run on a bounded thread pool (5 workers) through one shared
+`requests.Session`, with built-in pauses per source (0.2 s Open Library, 0.5 s
+Wikipedia, 1.0 s iTunes). To try one lookup:
 
 ```python
 from utils.metadata_client import MetadataClient
-
-client = MetadataClient()
-result = client.fetch("Why Machines Learn", "Anil Ananthaswamy")
-print(result["source"])       # "open_library", "wikipedia", or "itunes"
-print(result["description"])  # None if none of the three sources had a match
+r = MetadataClient().fetch("Why Machines Learn", "Anil Ananthaswamy")
+print(r["source"], r["description"])   # None if all three miss
 ```
 
-`fetch()` tries Open Library, then Wikipedia, then iTunes, stopping at the
-first usable description; it returns `None` if all three miss. There's a
-built-in pause before each network call (see "Why it's slow" below), so don't
-loop this over a large list without expecting it to take a while.
+## Design decisions
 
-## Why it's slow
+- **Sheet read as public CSV:** no credentials or Cloud project; the tradeoff is that
+  the ID is the only protection, so it lives only in `.env` / a GitHub secret.
+- **"Tracked" rows, sheet order:** detailed tracking began partway down the sheet, so
+  anything with a year or date counts, including undated audiobooks.
+- **First author for lookups** (see above).
+- **Generic Open Library subjects ignored** for candidate discovery (`Books`,
+  `Nonfiction`, `History`, `Biography`, catalog tags): "most popular books tagged
+  History" returned the same crowd-pleasers (*Shoe Dog*, *Born a Crime*) for every
+  profile. Its effect was not measured separately.
+- **Separate `results` branch:** bot commits stay out of code history and can't
+  conflict with yours.
+- **One job, two sequential runs:** parallel jobs would race to push the same branch.
+- **Cron at minute 17:** avoids GitHub's busiest slot (the top of the hour).
+- **Stateless web app:** no database; nothing survives a restart.
 
-The pipeline makes one live HTTP lookup per book it looks up metadata for —
-every book in your reading list, *and* every candidate book it's considering
-recommending (up to 40 by default). Each lookup has a built-in pause (0.2s
-before the Open Library attempt, 0.5s more before falling back to Wikipedia,
-1.0s more before falling back further to iTunes if Wikipedia also misses —
-Open Library has no documented rate limit so it only needs a light courtesy
-delay; Wikipedia does rate-limit and its fallback also means two extra
-requests, plus up to 3 retries with backoff if it 429s; iTunes has no
-documented rate limit *or* a clean signal to react to if one is hit, so its
-pause is a flat, conservative guess rather than adaptive backoff). A single
-`/recommend` call or `quick_start.py` run can still add up to 150-250+ network
-requests total — that's expected, not a bug. It's a straightforward tradeoff
-for using free, keyless APIs instead of a paid one with better rate limits.
+## Known limitations
 
-These fetches now run concurrently rather than strictly one at a time:
-`BookRecommender` uses a bounded thread pool (`max_workers`, default 5) for
-both the read-books lookup and candidate enrichment, since each lookup is
-independent and I/O-bound (mostly waiting on the network, not using CPU) —
-cheap to parallelize even on a modest machine. Total request count is
-unchanged, but up to `max_workers` of them are in flight at once instead of
-strictly one-at-a-time, so wall-clock time drops roughly in proportion.
-Pass a smaller `max_workers` to `BookRecommender(...)` on a more constrained
-machine, or a larger one for more speed at the cost of more concurrent load
-on Open Library/Wikipedia.
+- ~30% of books get no description even when spelled correctly (e.g. *Broken Supply
+  Chains*); fixing the sheet can't help.
+- Ranking is TF-IDF word overlap, so it can't match synonyms and generic words can
+  pull in unrelated popular books (the "filler tail").
+- Near-duplicate editions with very different title lengths can both appear.
+- The web app returns 10 results and doesn't use first-author lookup.
+- Placeholder authors in the sheet (e.g. "Many Authors") can't match anything.
+- `pyarrow` in `pyproject.toml` is unused and can be removed.
 
-All of those lookups also go through one shared `requests.Session`
-(`utils/metadata_client.py`) instead of opening a fresh connection per
-request, so repeated requests to the same host reuse an already-open TCP/TLS
-connection — a smaller, free win on top of the thread pool. Further levers
-(skipping the Wikipedia fallback for candidates, caching lookups across
-repeated `/recommend` calls) were considered and are still on the table if
-this isn't fast enough.
+## Ideas not built
 
-## Key files
-
-- `main.py` — the Flask app: routes for adding/uploading/editing/deleting books
-  and triggering recommendations.
-- `utils/recommender.py` — the `BookRecommender` class: the recommendation pipeline (metadata
-  lookup → TF-IDF profile → Open Library candidate search → cosine-similarity
-  ranking).
-- `utils/metadata_client.py` — the Open Library / Wikipedia / iTunes lookup client shared by
-  everything above (see "Using the metadata lookup directly").
-- `scripts/clean_books_data.py` — cleans the raw personal reading-log export.
-- `scripts/sync_from_sheet.py` / `utils/sheets_client.py` — reads the latest books
-  from the Google Sheet and runs the recommender on them.
-- `utils/book_dates.py`, `utils/book_columns.py` — date parsing and column-alias
-  helpers shared by the cleaner, the web app and the sheet sync.
-- `scripts/test_metadata_coverage.py` — measures description coverage against
-  real reading history.
-- `quick_start.py` — runs the recommender from the command line, no Flask UI.
-
-## Why Open Library, and why two fallbacks
-
-Open Library has no API key and no rate limit, which made it worth switching to
-as the primary source. But its `description` field is inconsistently populated,
-especially outside fiction — Open Library alone only found descriptions for
-about **36% of a 236-book test library** (mostly business/self-help nonfiction),
-measured before any fallback existed. Wikipedia and Apple's iTunes Search API
-(ebook listings) were picked as those fallbacks (over Google Books, whose
-keyless access is now hard-disabled — `quota_limit_value: 0` on every
-unauthenticated request) because both are also free and keyless, with no
-account or API key to manage. The two are complementary rather than redundant:
-iTunes tends to cover current commercial nonfiction/self-help that Open Library
-misses, while missing niche/technical titles Wikipedia or Open Library catch.
-With all three sources, coverage on the 20 books in `data/recent_20_books.csv` is **70%**
-(30% Open Library + 15% Wikipedia + 25% iTunes) — up from 47% with just the
-Wikipedia fallback in an earlier, larger test. Run `scripts/test_metadata_coverage.py` any time to
-re-measure it after further data or code changes.
+Text-embedding ranking (biggest likely quality gain; evaluate by hiding the 5 newest
+books and checking their rank), a fourth metadata source with an API key, recency
+weighting, email notifications, a lookup cache, and a backup cron (it would
+double-publish when both fire).
 
 ## Tech stack
 
-Flask, pandas, scikit-learn (TF-IDF + cosine similarity for ranking), thefuzz
-(fuzzy title matching to exclude already-read books), requests, uv.
+Flask, pandas, scikit-learn (TF-IDF, cosine similarity), thefuzz, requests,
+python-dotenv, pytest, uv, GitHub Actions. Python 3.10+.
