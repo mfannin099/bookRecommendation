@@ -175,3 +175,12 @@ def test_cleaning_is_idempotent():
     twice = clean_books_data.clean_books(once)
     pd.testing.assert_frame_equal(once, twice)
     assert once["audiobook"].tolist() == [False, True]
+
+
+@pytest.mark.parametrize("value, ok", [("15", True), ("1", True), ("50", True), ("0", False), ("51", False), ("abc", False)])
+def test_top_arg_range(value, ok):
+    if ok:
+        assert sync_from_sheet._top_arg(value) == int(value)
+    else:
+        with pytest.raises(Exception, match="whole number"):
+            sync_from_sheet._top_arg(value)

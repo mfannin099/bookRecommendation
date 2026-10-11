@@ -10,7 +10,7 @@ pass --genres "" to run with none.
 Usage:
     uv run python scripts/sync_from_sheet.py --dry-run     # just list the books
     uv run python scripts/sync_from_sheet.py
-    uv run python scripts/sync_from_sheet.py --n 30 --genres golf,business
+    uv run python scripts/sync_from_sheet.py --n 30 --genres golf,business --top 20
     uv run python scripts/sync_from_sheet.py --genres ""                  # no genre steering
 """
 import argparse
@@ -38,6 +38,8 @@ from utils.sheets_client import (
 
 OUTPUT_DIR = ROOT / "data" / "recommendations"
 DEFAULT_GENRES = "data,business"
+DEFAULT_TOP = 15
+MAX_TOP = 50
 
 
 def _n_arg(value: str) -> int:
@@ -45,6 +47,16 @@ def _n_arg(value: str) -> int:
         return validate_n(int(value))
     except (ValueError, SheetSyncError):
         raise argparse.ArgumentTypeError(f"must be a whole number from 1 to {MAX_BOOKS} (got {value!r})") from None
+
+
+def _top_arg(value: str) -> int:
+    try:
+        top = int(value)
+    except ValueError:
+        top = 0
+    if not 1 <= top <= MAX_TOP:
+        raise argparse.ArgumentTypeError(f"must be a whole number from 1 to {MAX_TOP} (got {value!r})")
+    return top
 
 
 def output_path(genre_keywords: list[str], today: date) -> Path:
@@ -64,6 +76,10 @@ def main() -> int:
     parser.add_argument(
         "--genres", default=DEFAULT_GENRES,
         help=f'comma-separated keywords to steer results (default "{DEFAULT_GENRES}"; "" for none)',
+    )
+    parser.add_argument(
+        "--top", type=_top_arg, default=DEFAULT_TOP, metavar=f"1-{MAX_TOP}",
+        help=f"how many recommendations to return (default {DEFAULT_TOP}, max {MAX_TOP})",
     )
     parser.add_argument("--dry-run", action="store_true", help="list the books and stop; no recommendations")
     args = parser.parse_args()
@@ -90,6 +106,7 @@ def main() -> int:
         books=[(title, first_author(author)) for title, author in zip(books["title"], books["author"])],
         force_run=True,
         genre_keywords=genre_keywords,
+        top_n=args.top,
     )
     try:
         recommendations = recommender.get_recommendations()
