@@ -8,6 +8,7 @@ free and keyless, so downstream TF-IDF steps always have something to work
 with as often as possible.
 """
 import html
+import random
 import re
 import time
 from urllib.parse import quote
@@ -51,10 +52,9 @@ def fetch_from_open_library(title, author):
     """Look up a single book on Open Library. Returns a metadata dict or None
     if no work was found or the work has no usable description."""
     try:
-        resp = _SESSION.get(
+        resp = _get(
             OPEN_LIBRARY_SEARCH_URL,
             params={"title": title, "author": author, "limit": 1},
-            timeout=10,
         )
         resp.raise_for_status()
         docs = resp.json().get("docs", [])
@@ -66,7 +66,7 @@ def fetch_from_open_library(title, author):
         if not work_key:
             return None
 
-        work_resp = _SESSION.get(OPEN_LIBRARY_WORK_URL.format(key=work_key), timeout=10)
+        work_resp = _get(OPEN_LIBRARY_WORK_URL.format(key=work_key))
         work_resp.raise_for_status()
         work = work_resp.json()
 
@@ -89,16 +89,46 @@ def fetch_from_open_library(title, author):
         return None
 
 
-def _wikipedia_get(url, params=None, max_retries=3):
-    """GET with backoff on Wikipedia's 429 (rate limit), which shows up in
-    normal use once a run makes more than a couple hundred requests."""
-    resp = None
-    for attempt in range(max_retries):
-        resp = _SESSION.get(url, params=params, timeout=10)
-        if resp.status_code != 429:
+# Transient failures worth retrying: rate limiting and server-side errors.
+RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
+REQUEST_TIMEOUT = 15
+MAX_RETRIES = 4
+BACKOFF_BASE = 1.5
+BACKOFF_MAX = 30
+
+
+def _retry_delay(attempt, resp=None):
+    """Honor Retry-After when the server sends a numeric one; otherwise
+    exponential backoff with jitter so parallel workers don't retry in lockstep."""
+    if resp is not None:
+        retry_after = resp.headers.get("Retry-After", "")
+        if retry_after.isdigit():
+            return min(int(retry_after), BACKOFF_MAX)
+    return min(BACKOFF_BASE * 2**attempt, BACKOFF_MAX) * random.uniform(0.75, 1.25)
+
+
+def _get(url, params=None, max_retries=MAX_RETRIES, timeout=REQUEST_TIMEOUT):
+    """GET with retry/backoff on timeouts, connection errors, 429 (Wikipedia
+    rate-limits once a run makes more than a couple hundred requests), and 5xx.
+    After the final attempt the last response is returned (or the last network
+    exception re-raised), so callers' raise_for_status()/except handling still
+    applies."""
+    for attempt in range(max_retries + 1):
+        last_attempt = attempt == max_retries
+        try:
+            resp = _SESSION.get(url, params=params, timeout=timeout)
+        except (requests.Timeout, requests.ConnectionError) as e:
+            if last_attempt:
+                raise
+            delay = _retry_delay(attempt)
+            print(f"  {type(e).__name__} for {url}; retry {attempt + 1}/{max_retries} in {delay:.1f}s")
+            time.sleep(delay)
+            continue
+        if resp.status_code not in RETRY_STATUS_CODES or last_attempt:
             return resp
-        time.sleep(int(resp.headers.get("Retry-After", 2**attempt)))
-    return resp
+        delay = _retry_delay(attempt, resp)
+        print(f"  HTTP {resp.status_code} for {url}; retry {attempt + 1}/{max_retries} in {delay:.1f}s")
+        time.sleep(delay)
 
 
 def fetch_from_wikipedia(title, author):
@@ -114,7 +144,7 @@ def fetch_from_wikipedia(title, author):
         return None
 
     try:
-        search_resp = _wikipedia_get(
+        search_resp = _get(
             WIKIPEDIA_SEARCH_URL,
             params={
                 "action": "query",
@@ -130,7 +160,7 @@ def fetch_from_wikipedia(title, author):
             return None
 
         page_title = results[0]["title"]
-        summary_resp = _wikipedia_get(WIKIPEDIA_SUMMARY_URL.format(title=quote(page_title)))
+        summary_resp = _get(WIKIPEDIA_SUMMARY_URL.format(title=quote(page_title)))
         if summary_resp.status_code != 200:
             return None
 
@@ -176,10 +206,9 @@ def fetch_from_itunes(title, author):
         return None
 
     try:
-        resp = _SESSION.get(
+        resp = _get(
             ITUNES_SEARCH_URL,
             params={"term": f"{title} {author}", "media": "ebook", "limit": 1},
-            timeout=10,
         )
         resp.raise_for_status()
         results = resp.json().get("results", [])
@@ -217,9 +246,7 @@ def fetch_from_itunes(title, author):
 def search_open_library_candidates(query, limit=40):
     """Search Open Library for candidate books matching a query string."""
     try:
-        resp = _SESSION.get(
-            OPEN_LIBRARY_SEARCH_URL, params={"q": query, "limit": limit}, timeout=10
-        )
+        resp = _get(OPEN_LIBRARY_SEARCH_URL, params={"q": query, "limit": limit})
         resp.raise_for_status()
         docs = resp.json().get("docs", [])
     except Exception as e:
@@ -242,10 +269,9 @@ def search_open_library_subject_candidates(subject, limit=10, sort="rating"):
     no popularity signal at all."""
     slug = quote(re.sub(r"\s+", "_", subject.strip().lower()))
     try:
-        resp = _SESSION.get(
+        resp = _get(
             OPEN_LIBRARY_SUBJECT_URL.format(slug=slug),
             params={"limit": limit, "sort": sort},
-            timeout=10,
         )
         resp.raise_for_status()
         works = resp.json().get("works", [])
