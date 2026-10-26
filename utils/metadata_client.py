@@ -298,7 +298,7 @@ class MetadataClient:
 
     def fetch(self, title, author):
         """Open Library has no documented rate limit, so its pause is just a
-        light courtesy delay. Wikipedia does rate-limit (see _wikipedia_get's
+        light courtesy delay. Wikipedia does rate-limit (see _get's
         429 backoff), so it gets a longer pause to make that less likely to
         trigger in the first place. iTunes has no documented rate limit *or*
         a clean signal (no 429/Retry-After) to react to if one is hit, so its
