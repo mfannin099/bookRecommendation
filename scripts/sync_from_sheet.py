@@ -33,6 +33,7 @@ from utils.sheets_client import (
     SheetSyncError,
     fetch_sheet,
     recent_tracked_books,
+    tracked_books,
     validate_n,
 )
 
@@ -81,11 +82,18 @@ def main() -> int:
         "--top", type=_top_arg, default=DEFAULT_TOP, metavar=f"1-{MAX_TOP}",
         help=f"how many recommendations to return (default {DEFAULT_TOP}, max {MAX_TOP})",
     )
+    parser.add_argument(
+        "--include-sheet-books", action="store_true",
+        help="allow recommending tracked books older than the --n look-back "
+             "(by default every tracked book on the sheet is excluded)",
+    )
     parser.add_argument("--dry-run", action="store_true", help="list the books and stop; no recommendations")
     args = parser.parse_args()
 
     try:
-        books = recent_tracked_books(fetch_sheet(), args.n)
+        sheet = fetch_sheet()
+        books = recent_tracked_books(sheet, args.n)
+        all_tracked = tracked_books(sheet)
     except SheetSyncError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
@@ -107,6 +115,9 @@ def main() -> int:
         force_run=True,
         genre_keywords=genre_keywords,
         top_n=args.top,
+        # Anything already tracked on the sheet, not just the look-back window.
+        exclude_books=[] if args.include_sheet_books
+        else list(zip(all_tracked["title"], all_tracked["author"])),
     )
     try:
         recommendations = recommender.get_recommendations()
@@ -121,6 +132,8 @@ def main() -> int:
     out_path = output_path(genre_keywords, date.today())
     recommendations.to_csv(out_path, index=False)
 
+    if recommender.excluded_titles:
+        print(f"\nSkipped {len(recommender.excluded_titles)} candidate(s) already tracked on your sheet.")
     print(f"\nBased on {recommender.matched_book_count} of {recommender.total_book_count} books.")
     print(recommendations[["title", "authors", "similarity"]].to_string(index=False))
     print(f"\nWrote {out_path.relative_to(ROOT)}")

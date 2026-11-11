@@ -53,6 +53,8 @@ Other scripts:
 `scripts/sync_from_sheet.py` takes your most recent books from the sheet, runs the
 recommender, and writes
 `data/recommendations/matt_book_recommendations_<date>_<genres>.csv` (gitignored).
+Any book already tracked on the sheet (not just the recent ones) is never recommended; pass
+`--include-sheet-books` to turn that off.
 
 **Setup**
 

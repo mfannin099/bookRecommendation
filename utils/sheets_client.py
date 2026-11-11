@@ -94,15 +94,15 @@ def _column_or_blank(df: pd.DataFrame, name: str) -> pd.Series:
     return df[name] if name in df.columns else pd.Series([None] * len(df), index=df.index)
 
 
-def recent_tracked_books(df: pd.DataFrame, n: int = DEFAULT_BOOKS) -> pd.DataFrame:
-    """Return the `n` most recent tracked books as a DataFrame with columns
-    title, author, end_date (NaT if no end date logged yet), oldest first.
+def tracked_books(df: pd.DataFrame) -> pd.DataFrame:
+    """Return every tracked book as a DataFrame with columns title, author,
+    end_date (NaT if no end date logged yet), in sheet order (oldest first).
 
     Tracked = has a year or a parseable start/end date. Rows without a title
     or author are skipped (a lookup without an author is unreliable);
-    duplicate title+author pairs keep their last occurrence.
+    duplicate title+author pairs keep their last occurrence. Untracked
+    "want to read" rows are not included.
     """
-    validate_n(n)
     title_col = find_column(df.columns, TITLE_COLUMN_ALIASES)
     author_col = find_column(df.columns, AUTHOR_COLUMN_ALIASES)
     if title_col is None or author_col is None or "end_date" not in df.columns:
@@ -127,4 +127,10 @@ def recent_tracked_books(df: pd.DataFrame, n: int = DEFAULT_BOOKS) -> pd.DataFra
     tracked = years.notna() | end_dates.notna() | start_dates.notna()
     books = books[tracked & (books["title"] != "") & (books["author"] != "")]
     books = books[~books["key"].duplicated(keep="last")].drop(columns="key")
-    return books.tail(n).reset_index(drop=True)
+    return books.reset_index(drop=True)
+
+
+def recent_tracked_books(df: pd.DataFrame, n: int = DEFAULT_BOOKS) -> pd.DataFrame:
+    """The last `n` of tracked_books(df), in sheet order."""
+    validate_n(n)
+    return tracked_books(df).tail(n).reset_index(drop=True)

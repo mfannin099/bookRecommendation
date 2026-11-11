@@ -16,6 +16,7 @@ from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS, TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from thefuzz import fuzz
 
+from utils.book_columns import first_author
 from utils.metadata_client import (
     MetadataClient,
     search_open_library_candidates,
@@ -94,13 +95,48 @@ def _is_usable_subject(subject):
     )
 
 
+# An exclusion title this close to a candidate's is the same book outright;
+# a looser (partial) title match only counts when the author agrees too.
+EXCLUDE_EXACT_TITLE_SCORE = 90
+
+
+def _base_title(title):
+    """Title without its subtitle ("Atomic Habits: An Easy & Proven Way..."
+    -> "atomic habits"), lowercased."""
+    return title.split(":", 1)[0].strip().lower()
+
+
+def _author_surname(authors):
+    names = first_author(authors or "").split()
+    return names[-1].lower() if names else ""
+
+
+def _is_same_book(title, authors, other_title, other_authors, loose_score):
+    """True when two (title, authors) pairs are plausibly the same book.
+
+    Titles alone are risky at scale: partial_ratio matches any candidate
+    containing a short read title ("Dune"), so the loose match also needs
+    the first author's surname to appear in the other side's author string.
+    """
+    a, b = _base_title(title), _base_title(other_title)
+    if not a or not b:
+        return False
+    if fuzz.ratio(a, b) >= EXCLUDE_EXACT_TITLE_SCORE:
+        return True
+    if fuzz.partial_ratio(a, b) < loose_score:
+        return False
+    surname = _author_surname(other_authors)
+    return bool(surname) and surname in (authors or "").lower()
+
+
 class BookRecommender:
 
     def __init__(self, books, cache_path="library.parquet",
                  force_run=False, terms_in_search_query=3, candidate_pool_size=40,
                  already_read_match_score=85, top_n=10, max_workers=5,
                  min_similarity=0.05, genre_keywords=None, genre_boost_repeats=5,
-                 on_progress=None, subject_count=3, subject_candidate_limit=10):
+                 on_progress=None, subject_count=3, subject_candidate_limit=10,
+                 exclude_books=None):
         """books: list of (title, author) tuples for the books already read.
 
         subject_count/subject_candidate_limit control the second candidate
@@ -113,6 +149,12 @@ class BookRecommender:
         raw, before dedup) so this doesn't double the keyword search's
         existing candidate_pool_size=40 and proportionally double
         /recommend's runtime.
+
+        exclude_books: extra (title, author) pairs to never recommend, beyond
+        the books the profile is built from - e.g. every tracked book on the
+        sheet, not just the recent look-back window. Matching is
+        author-aware (see _is_same_book). Titles dropped this way are
+        collected in self.excluded_titles.
 
         on_progress, if given, is called with a dict at each meaningful step
         (a book/candidate finishing its metadata lookup, or a phase
@@ -141,6 +183,8 @@ class BookRecommender:
 
         self.titles_list = [title for title, _author in books]
         self.authors_list = [author for _title, author in books]
+        self.exclude_books = list(exclude_books or [])
+        self.excluded_titles = []
         self.cache_path = cache_path
         self.force_run = force_run
         self.terms_in_search_query = terms_in_search_query
@@ -245,6 +289,17 @@ class BookRecommender:
         all_terms = list(dict.fromkeys([*self.genre_keywords, *top_keywords]))
         return " ".join(all_terms)
 
+    def _is_excluded(self, candidate):
+        """True if the candidate is one of exclude_books. Records the
+        title in excluded_titles (once) when it is."""
+        for title, author in self.exclude_books:
+            if _is_same_book(candidate["title"], candidate.get("author"), title, author,
+                             self.already_read_match_score):
+                if candidate["title"] not in self.excluded_titles:
+                    self.excluded_titles.append(candidate["title"])
+                return True
+        return False
+
     def fetch_candidates(self, search_query):
         """Search Open Library for candidates, excluding already-read titles
         and near-duplicates of a candidate already kept (Open Library often
@@ -259,6 +314,8 @@ class BookRecommender:
             title = c["title"]
             if any(fuzz.partial_ratio(title.lower(), read.lower()) >= self.already_read_match_score
                    for read in already_read):
+                continue
+            if self._is_excluded(c):
                 continue
             if any(fuzz.ratio(title.lower(), kept.lower()) >= self.already_read_match_score
                    for kept in kept_titles):
@@ -303,6 +360,8 @@ class BookRecommender:
                 title = c["title"]
                 if any(fuzz.partial_ratio(title.lower(), read.lower()) >= self.already_read_match_score
                        for read in already_read):
+                    continue
+                if self._is_excluded(c):
                     continue
                 if any(fuzz.ratio(title.lower(), kept.lower()) >= self.already_read_match_score
                        for kept in kept_titles):
