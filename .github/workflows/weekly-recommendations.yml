@@ -1,6 +1,6 @@
 name: Weekly book recommendations
 
-# Every Saturday morning, pull the most recent books from the Google Sheet and
+# Twice a month (the 1st and 15th), pull the most recent books from the Google Sheet and
 # write two recommendation CSVs (default genres, then habits/discipline/mindset) to
 # the `results` branch. See "Weekly automation" in README.md.
 
@@ -9,7 +9,9 @@ on:
     # GitHub cron is UTC. 12:17 UTC = 8:17 AM Eastern during daylight time
     # (7:17 AM after clocks fall back). Deliberately off the top of the hour:
     # :00 runs are the most likely to be delayed or dropped by GitHub.
-    - cron: "17 12 * * 6"
+    # Cron has no "every 14 days", so this is the 1st and 15th of each month
+    # (13-16 days apart) - the closest simple biweekly schedule.
+    - cron: "17 12 1,15 * *"
   workflow_dispatch:
     inputs:
       n:

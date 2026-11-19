@@ -11,7 +11,7 @@ Two ways to use it:
 1. **Web app** (`main.py`) — type or upload a book list, get recommendations in the
    browser. Nothing is saved between restarts.
 2. **Weekly automation** (`scripts/sync_from_sheet.py` + GitHub Actions) — reads your
-   reading-log Google Sheet and, every Saturday, commits two fresh recommendation
+   reading-log Google Sheet and, on the 1st and 15th of each month, commits two fresh recommendation
    CSVs to a `results` branch. Your laptop doesn't need to be on.
 
 **Status:** feature-complete. See [Limitations](#known-limitations) and
@@ -109,7 +109,7 @@ matched_subjects`.
 
 ## Weekly automation
 
-`.github/workflows/weekly-recommendations.yml` runs **Saturdays at 12:17 UTC** (8:17
+`.github/workflows/weekly-recommendations.yml` runs **on the 1st and 15th of each month at 12:17 UTC** (about every two weeks; 8:17
 AM EDT; 7:17 AM after Nov 1 since cron ignores daylight saving — use `17 13` to
 keep 8:17 AM). You can also start it from the Actions tab (**Run workflow**, optional
 `n`, default 30). One job, up to 60 minutes:
@@ -148,7 +148,7 @@ results on demand.
 | `Sheet is missing expected columns` | Header changed; need title, author and `end_date`. |
 | "Based on 20 of 30 books" | Normal: title typos in the sheet (capitalization is ignored) or books missing from all sources. |
 | Lookup `500` / timeout | Open Library is flaky; that lookup is skipped, so results vary slightly. |
-| Saturday run missing | Wait a few hours, then use **Run workflow**. |
+| Scheduled run missing | Wait a few hours, then use **Run workflow**. |
 | Unrelated novels in the list | The keywords found few candidates; try different or fewer, more concrete ones. |
 
 ## Project layout
